@@ -450,7 +450,7 @@ class Mininet( object ):
             output( '%s -> ' % node.name )
             for dest in hosts:
                 if node != dest:
-                    result = node.cmd( 'ping -c1 ' + dest.IP() )
+                    result = node.cmd( 'ping -c1 -W 1 ' + dest.IP() )
                     sent, received = self._parsePing( result )
                     packets += sent
                     if received > sent:
