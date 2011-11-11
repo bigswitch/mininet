@@ -560,7 +560,6 @@ class UserSwitch( Switch ):
         """Start OpenFlow reference user datapath.
            Log to /tmp/sN-{ofd,ofp}.log.
            controllers: list of controller objects"""
-        controller = controllers[ 0 ]
         ofdlog = '/tmp/' + self.name + '-ofd.log'
         ofplog = '/tmp/' + self.name + '-ofp.log'
         self.startIntfs()
@@ -575,7 +574,8 @@ class UserSwitch( Switch ):
             ' punix:/tmp/' + self.name + mac_str + ' --no-slicing ' +
             ' 1> ' + ofdlog + ' 2> ' + ofdlog + ' &' )
         self.cmd( 'ofprotocol unix:/tmp/' + self.name +
-            ' tcp:%s:%d' % ( controller.IP(), controller.port ) +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                        for c in controllers ] ) +
             ' --fail=closed ' + self.opts +
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
 
@@ -627,9 +627,9 @@ class KernelSwitch( Switch ):
         intfs = [ self.intfs[ port ] for port in ports ]
         self.cmd( 'dpctl', 'addif', self.dp, ' '.join( intfs ) )
         # Run protocol daemon
-        controller = controllers[ 0 ]
         self.cmd( 'ofprotocol ' + self.dp +
-            ' tcp:%s:%d' % ( controller.IP(), controller.port ) +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                        for c in controllers ] ) +
             ' --fail=closed ' + self.opts +
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
         self.execed = False
@@ -686,9 +686,9 @@ class OVSKernelSwitch( Switch ):
         intfs = [ self.intfs[ port ] for port in ports ]
         self.cmd( 'ovs-dpctl', 'add-if', self.dp, ' '.join( intfs ) )
         # Run protocol daemon
-        controller = controllers[ 0 ]
         self.cmd( 'ovs-openflowd ' + self.dp +
-            ' tcp:%s:%d' % ( controller.IP(), controller.port ) +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                        for c in controllers ] ) +
             ' --fail=secure ' + self.opts + mac_str +
             ' 1>' + ofplog + ' 2>' + ofplog + '&' )
         self.execed = False
@@ -749,10 +749,10 @@ class OVSUserSwitch( Switch ):
         intfs = [ self.intfs[ port ] for port in ports ]
         # self.cmd( 'ovs-dpctl', 'add-if', self.dp, ' '.join( intfs ) )
         # Run protocol daemon
-        controller = controllers[ 0 ]
         self.cmd( 'ovs-openflowd -v ' + self.dp +
             ' --ports=' + ','.join(intfs) +
-            ' tcp:%s:%d' % ( controller.IP(), controller.port ) +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                        for c in controllers ] ) +
             ' --fail=secure ' + self.opts + mac_str +
             ' 1>' + ofplog + ' 2>' + ofplog + '&' )
         self.execed = False
