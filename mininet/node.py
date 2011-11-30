@@ -202,11 +202,18 @@ class Node( object ):
             # Replace empty commands with something harmless
             cmd = 'echo -n'
         if printPid and not isShellBuiltin( cmd ):
-            cmd = 'mnexec -p ' + cmd
+            use_mnexec = kwargs.get( 'mn_use_mnexec', True)
+            if use_mnexec:
+                cmd = 'mnexec -p ' + cmd
+            disable_io_buf = kwargs.get( 'mn_disable_io_buf', False)
+            if disable_io_buf:
+                cmd = 'stdbuf -i0 -o0 -e0 ' + cmd
         self.write( cmd + '\n' )
-        self.lastCmd = cmd
-        self.lastPid = None
-        self.waiting = True
+        wait_flag = kwargs.get( 'mn_wait', True)
+        if wait_flag:
+            self.lastCmd = cmd
+            self.lastPid = None
+            self.waiting = True
 
     def sendInt( self, sig=signal.SIGINT ):
         "Interrupt running command."
