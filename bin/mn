@@ -54,7 +54,7 @@ CONTROLLERS = { 'ref': Controller,
                'none': lambda name: None }
 
 # optional tests to run
-TESTS = [ 'cli', 'build', 'pingall', 'pingpair', 'iperf', 'all', 'iperfudp',
+TESTS = [ 'cli', 'build', 'pingall', 'pingset', 'pingpair', 'iperf', 'all', 'iperfudp',
          'none' ]
 
 ALTSPELLING = { 'pingall': 'pingAll', 'pingpair': 'pingPair',

@@ -151,6 +151,23 @@ class CLI( Cmd ):
         "Ping between first two hosts, useful for testing."
         self.mn.pingPair()
 
+    def do_pingset (self, line ):
+        "Ping between all hosts in a set."
+        args = line.split()
+        if not args or len(args) < 2:
+            error( "requires at least two hosts specified" )
+        else:
+            hosts = []
+            err = False
+            for arg in args:
+                if arg not in self.nodemap:
+                    err = True
+                    error( "node '%s' not in network\n" % arg )
+                else:
+                    hosts.append( self.nodemap[ arg ] )
+            if not err:
+                self.mn.ping( hosts )
+
     def do_iperf( self, line ):
         "Simple iperf TCP test between two (optionally specified) hosts."
         args = line.split()
