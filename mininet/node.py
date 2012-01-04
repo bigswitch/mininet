@@ -65,7 +65,7 @@ class Node( object ):
     portBase = 0  # Nodes always start with eth0/port0, even in OF 1.0
 
     def __init__( self, name, inNamespace=True,
-        defaultMAC=None, defaultIP=None, **kwargs ):
+        defaultMAC=None, defaultIP=None, prefix='n', **kwargs ):
         """name: name of node
            inNamespace: in network namespace?
            defaultMAC: default MAC address for intf 0
@@ -74,6 +74,7 @@ class Node( object ):
         self.inNamespace = inNamespace
         self.defaultIP = defaultIP
         self.defaultMAC = defaultMAC
+        self.prefix = prefix
         opts = '-cdp'
         if self.inNamespace:
             opts += 'n'

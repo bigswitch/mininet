@@ -150,13 +150,13 @@ class Mininet( object ):
         if topo and build:
             self.build()
 
-    def addHost( self, name, mac=None, ip=None ):
+    def addHost( self, name, mac=None, ip=None, prefix='h'):
         """Add host.
            name: name of host to add
            mac: default MAC address for intf 0
            ip: default IP address for intf 0
            returns: added host"""
-        host = self.host( name, defaultMAC=mac, defaultIP=ip )
+        host = self.host( name, defaultMAC=mac, defaultIP=ip, prefix=prefix )
         self.hosts.append( host )
         self.nameToNode[ name ] = host
         return host
@@ -298,7 +298,9 @@ class Mininet( object ):
         info( '*** Creating network\n' )
         info( '*** Adding hosts:\n' )
         for hostId in sorted( topo.hosts() ):
-            addNode( 'h', self.addHost, hostId )
+            node_info = topo.node_info [ hostId ]
+            prefix = node_info.prefix
+            addNode( prefix, self.addHost, hostId)
         info( '\n*** Adding switches:\n' )
         for switchId in sorted( topo.switches() ):
             addNode( 's', self.addSwitch, switchId )
