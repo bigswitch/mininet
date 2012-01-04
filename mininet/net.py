@@ -161,7 +161,7 @@ class Mininet( object ):
         self.nameToNode[ name ] = host
         return host
 
-    def addSwitch( self, name, mac=None, ip=None ):
+    def addSwitch( self, name, mac=None, ip=None, prefix='s' ):
         """Add switch.
            name: name of switch to add
            mac: default MAC address for kernel/OVS switch intf 0
@@ -169,11 +169,11 @@ class Mininet( object ):
            side effect: increments the listenPort member variable."""
         if self.switch == UserSwitch:
             sw = self.switch( name, listenPort=self.listenPort,
-                defaultMAC=mac, defaultIP=ip, inNamespace=self.inNamespace )
+                defaultMAC=mac, defaultIP=ip, inNamespace=self.inNamespace, prefix=prefix )
         else:
             sw = self.switch( name, listenPort=self.listenPort,
                 defaultMAC=mac, defaultIP=ip, dp=self.dps,
-                inNamespace=self.inNamespace )
+                inNamespace=self.inNamespace , prefix=prefix )
         if not self.inNamespace and self.listenPort:
             self.listenPort += 1
         self.dps += 1
@@ -303,7 +303,9 @@ class Mininet( object ):
             addNode( prefix, self.addHost, hostId)
         info( '\n*** Adding switches:\n' )
         for switchId in sorted( topo.switches() ):
-            addNode( 's', self.addSwitch, switchId )
+            switch_info = topo.node_info [ switchId ]
+            prefix = switch_info.prefix
+            addNode( prefix, self.addSwitch, switchId )
         info( '\n*** Adding links:\n' )
         for srcId, dstId in sorted( topo.edges() ):
             src, dst = self.idToNode[ srcId ], self.idToNode[ dstId ]

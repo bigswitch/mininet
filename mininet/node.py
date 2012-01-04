@@ -510,8 +510,8 @@ class Switch( Node ):
 
     portBase = SWITCH_PORT_BASE  # 0 for OF < 1.0, 1 for OF >= 1.0
 
-    def __init__( self, name, opts='', listenPort=None, dpid=None, **kwargs):
-        Node.__init__( self, name, **kwargs )
+    def __init__( self, name, prefix = 's', opts='', listenPort=None, dpid=None, **kwargs):
+        Node.__init__( self, name, prefix=prefix, **kwargs )
         self.opts = opts
         self.listenPort = listenPort
         if self.listenPort:
