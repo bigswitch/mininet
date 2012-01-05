@@ -58,8 +58,8 @@ class Node(object):
     '''Node-specific vertex metadata for a Topo object.'''
 
     def __init__(self, connected = False, admin_on = True,
-                 power_on = True, fault = False, is_switch = True, 
-                 prefix = 'h'):
+                 power_on = True, fault = False, is_switch = True,
+                 prefix= 'h'):
         '''Init.
 
         @param connected actively connected to controller
