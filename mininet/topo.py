@@ -59,7 +59,7 @@ class Node(object):
 
     def __init__(self, connected = False, admin_on = True,
                  power_on = True, fault = False, is_switch = True,
-                 prefix= 'h'):
+                 prefix= None):
         '''Init.
 
         @param connected actively connected to controller
@@ -73,6 +73,11 @@ class Node(object):
         self.power_on = power_on
         self.fault = fault
         self.is_switch = is_switch
+        if prefix is None:
+            if is_switch:
+                prefix = 's'
+            else:
+                prefix = 'h'
         self.prefix = prefix
 
 
