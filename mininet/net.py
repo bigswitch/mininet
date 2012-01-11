@@ -300,14 +300,14 @@ class Mininet( object ):
         for hostId in sorted( topo.hosts() ):
             node_info = topo.node_info [ hostId ]
             prefix = node_info.prefix
-            #addNode( prefix, self.addHost, hostId)
-            addNode( 'h', self.addHost, hostId )
+            addNode( prefix, self.addHost, hostId)
+            #addNode( 'h', self.addHost, hostId )
         info( '\n*** Adding switches:\n' )
         for switchId in sorted( topo.switches() ):
             switch_info = topo.node_info [ switchId ]
             prefix = switch_info.prefix
-            #addNode( prefix, self.addSwitch, switchId )
-            addNode( 's', self.addSwitch, switchId )
+            addNode( prefix, self.addSwitch, switchId )
+            #addNode( 's', self.addSwitch, switchId )
         info( '\n*** Adding links:\n' )
         for srcId, dstId in sorted( topo.edges() ):
             src, dst = self.idToNode[ srcId ], self.idToNode[ dstId ]
