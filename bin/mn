@@ -81,6 +81,8 @@ def atexitProcessCleanup():
     # the process group wait a while then send SIGHUP and SIGKILL 
     # (there will be interactive shells runnign that ignore SIGTERM)
     # TODO: maybe we should start right away with SIGHUP...
+    # NOTE: will not be called when killed by a signal. Should add
+    # a signal handler to also clean up when killed by a signal! 
     pid = os.fork()
     if pid == 0:
         pgrp = os.getpgrp()
