@@ -34,7 +34,7 @@ def cleanup():
     sh( 'killall -9 ' + zombies + ' 2> /dev/null' )
 
     info( "*** Removing junk from /tmp\n" )
-    sh( 'rm -f /tmp/vconn* /tmp/vlogs* /tmp/*.out /tmp/*.log' )
+    sh( 'rm -f /tmp/vconn* /tmp/vlogs* /tmp/*.out /tmp/*.log /tmp/mn-*sock' )
 
     info( "*** Removing old screen sessions\n" )
     cleanUpScreens()
@@ -45,8 +45,15 @@ def cleanup():
         if dp:
             sh( 'dpctl deldp ' + dp )
 
-    ovsdps = sh( "ovs-dpctl show | egrep '\w+@\w+:'" ).split( '\n' )
-    for dp in dps:
+    # OVS is tricky. We try the default DB connection. 
+    # Finally we also delete the kernel datapath
+    ovsdps = sh( "ovs-vsctl --no-wait -t1 list-br 2>/dev/null | egrep '^mn-dp[0-9]+$'" ).split( '\n' )
+    for dp in ovsdps:
+        if dp:
+            sh( 'ovs-vsctl --no-wait -t1 del-br ' + dp + ' 2>/dev/null')
+
+    ovsdps = sh( "ovs-dpctl show | egrep '\w+@\mn-dp[0-9]+:'" ).split( '\n' )
+    for dp in ovsdps:
         if dp:
             sh( 'ovs-dpctl del-dp ' + dp )
             

@@ -29,7 +29,7 @@ def quietRun( *cmd ):
     if len( cmd ) == 1:
         cmd = cmd[ 0 ]
         if isinstance( cmd, str ):
-            cmd = cmd.split( ' ' )
+            cmd = cmd.split()
     cmd = ["sudo", "-E", "env", "PATH=%s" % os.environ["PATH"]] + cmd
     popen = Popen( cmd, stdout=PIPE, stderr=STDOUT )
     # We can't use Popen.communicate() because it uses

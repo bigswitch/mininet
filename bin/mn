@@ -12,7 +12,9 @@ Example to pull custom params (topo, switch, etc.) from a file:
 """
 
 from optparse import OptionParser
-import os.path
+import os
+import signal
+import atexit
 import sys
 import time
 
@@ -60,6 +62,36 @@ TESTS = [ 'cli', 'build', 'pingall', 'pingset', 'pingpair', 'iperf', 'all', 'ipe
 ALTSPELLING = { 'pingall': 'pingAll', 'pingpair': 'pingPair',
     'iperfudp': 'iperfUdp', 'iperfUDP': 'iperfUdp', 'prefixlen': 'prefixLen' }
 
+
+def killpg_wrapper(pgrp, sig):
+    "Wrapper for os.killpg that ignores errors"
+    try:
+        os.killpg(pgrp, sig)
+    except OSError:
+        pass;
+
+
+def atexitProcessCleanup():
+    "atexit handler to cleanup most running processes mn has started. "
+    # Almost all processes started are still in mn's process group and
+    # session. This even holds for processes that are started using 
+    # "sudo ... mnexec ...".
+    # We fork(). In the child we call setsid() to create a new session
+    # so that we don't kill the killer ;-) and then send SIGTERM to
+    # the process group wait a while then send SIGHUP and SIGKILL 
+    # (there will be interactive shells runnign that ignore SIGTERM)
+    # TODO: maybe we should start right away with SIGHUP...
+    pid = os.fork()
+    if pid == 0:
+        pgrp = os.getpgrp()
+        os.setsid()
+        killpg_wrapper(pgrp, signal.SIGTERM)
+        time.sleep(0.2)
+        killpg_wrapper(pgrp, signal.SIGHUP)
+        time.sleep(0.2)
+        killpg_wrapper(pgrp, signal.SIGKILL)
+
+
 def buildTopo( topo ):
     "Create topology from string with format (object, arg1, arg2,...)."
     topo_split = topo.split( ',' )
@@ -104,6 +136,7 @@ class MininetRunner( object ):
 
     def __init__( self ):
         "Init."
+        atexit.register(atexitProcessCleanup)
         self.options = None
         self.args = None  # May be used someday for more CLI scripts
         self.validate = None
