@@ -762,6 +762,7 @@ class OVSKernelSwitchOld( Switch ):
     """Open VSwitch kernel-space switch for OVS < 1.2.0
        Currently only works in the root namespace.
        Uses the old non ovsdb / vswitchd based user-space tools.
+       This class can eventually be removed!
     """
 
     def __init__( self, name, dp=None, **kwargs ):
