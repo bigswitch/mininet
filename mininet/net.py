@@ -581,7 +581,7 @@ class Mininet( object ):
             error('%s is not a switch' % switchName)
             return
             
-        if not isinstance(sw, OVSKernelSwitch):
+        if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchOld):
             error('attachHost only works with OVS kernel switches')
             return
             
@@ -618,7 +618,7 @@ class Mininet( object ):
                 error('%s is not a switch' % switchName)
                 return
                 
-            if not isinstance(sw, OVSKernelSwitch):
+            if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchOld):
                 error('attachHost only works with OVS kernel switches')
                 return
         else:
