@@ -821,11 +821,11 @@ class OVSKernelSwitchOld( Switch ):
         self.deleteIntfs()
 
     def addIntf( self, intf, port ):
-        super(OVSKernelSwitch, self).addIntf(intf, port)
+        super(OVSKernelSwitchOld, self).addIntf(intf, port)
         self.cmd( 'ovs-dpctl', 'add-if', self.dp, intf )
     
     def deleteIntf( self, intf ):
-        super(OVSKernelSwitch, self).deleteIntf(intf)
+        super(OVSKernelSwitchOld, self).deleteIntf(intf)
         self.cmd( 'ovs-dpctl', 'del-if', self.dp, intf )
         
 class OVSUserSwitch( Switch ):
