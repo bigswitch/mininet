@@ -672,17 +672,29 @@ class OVSKernelSwitch( Switch ):
         moduleName='Open vSwitch (openvswitch.org)'
         pathCheck( 'ovs-vsctl', 'ovsdb-server', 'ovs-vswitchd', moduleName=moduleName )
         moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
+
         if not checkRunning('ovsdb-server', 'ovs-vswitchd'):
+            ovsdb_server_cmd = ['ovsdb-server', 
+                            '--remote=punix:/tmp/mn-openvswitch-db.sock', 
+                            '--remote=db:Open_vSwitch,manager_options']
+
+            # We need to specify the DB path for OVS before 1.2.0
+            ovs_ver = quietRun('ovsdb-server -V').split('\n')[0]
+            # Note the space in front of the version strings.
+            # TODO: Maybe we should extract the version instead of 
+            #       substr matching
+            if ' 1.1.' in ovs_ver or ' 1.0.' in ovs_ver:
+                ovsdb_server_cmd.insert(1, '/usr/local/etc/openvswitch/conf.db')
+                
             # Every OVS command *except* ovsdb-server has a default path
             # to the database socket hardcoded. Problem is: if we need
             # to run ovsdb-server ourselves we cannot figure out what
             # this path is. Grr.
-            Popen(['ovsdb-server', '--remote=punix:/tmp/mn-openvswitch-db.sock', 
-                             '--remote=db:Open_vSwitch,manager_options'], 
-                             stderr = STDOUT, stdout = open('/tmp/mn-ovsdb-server.log', "w") )
+            Popen(ovsdb_server_cmd, 
+                         stderr = STDOUT, stdout = open('/tmp/mn-ovsdb-server.log', "w") )
             sleep(0.1)
             Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
-                             stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
+                          stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
             sleep(0.1)
             OVSKernelSwitch.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
         else:
