@@ -21,8 +21,18 @@ UserSwitch: a switch using the user-space switch from the OpenFlow
 KernelSwitch: a switch using the kernel switch from the OpenFlow reference
     implementation.
 
-OVSSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
-    implementation (openvswitch.org).
+OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
+    implementation (openvswitch.org). Supports all 1.x version. Uses 
+    ovsdb-server and vswitchd (which will be started on demand if 
+    necessary.
+
+OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
+    implementation (openvswitch.org). Only works with 1.0.x and 1.1.x BUT
+    does not use ovsdb-server. For environments in which the ovsdb file
+    hasn't been set up. 
+
+OVSUserSwitch: a switch using the user-space OpenVSwitch 
+    OpenFlow-compatible switch implementation (openvswitch.org).
 
 Controller: superclass for OpenFlow controllers. The default controller
     is controller(8) from the reference implementation.
@@ -747,6 +757,74 @@ class OVSKernelSwitch( Switch ):
     def deleteIntf( self, intf ):
         super(OVSKernelSwitch, self).deleteIntf(intf)
         self.cmd( self.vsctl_cmd, ' -- --if-exists', 'del-port', self.dp, intf )
+        
+class OVSKernelSwitchOld( Switch ):
+    """Open VSwitch kernel-space switch for OVS < 1.2.0
+       Currently only works in the root namespace.
+       Uses the old non ovsdb / vswitchd based user-space tools.
+    """
+
+    def __init__( self, name, dp=None, **kwargs ):
+        """Init.
+           name: name for switch
+           dp: netlink id (0, 1, 2, ...)
+           defaultMAC: default MAC as unsigned int; random value if None"""
+        Switch.__init__( self, name, **kwargs )
+        self.dp = 'dp%i' % dp
+        self.intf = self.dp
+        if self.inNamespace:
+            error( "OVSKernelSwitch currently only works"
+                " in the root namespace.\n" )
+            exit( 1 )
+
+    @staticmethod
+    def setup():
+        "Ensure any dependencies are loaded; if not, try to load them."
+        moduleName='Open vSwitch (openvswitch.org) < 1.2.0'
+        pathCheck( 'ovs-dpctl', 'ovs-openflowd', moduleName=moduleName )
+        moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
+
+    def start( self, controllers ):
+        "Start up kernel datapath."
+        ofplog = '/tmp/' + self.name + '-ofp.log'
+        self.startIntfs()
+        # Delete local datapath if it exists;
+        # then create a new one monitoring the given interfaces
+        quietRun( 'ovs-dpctl del-dp ' + self.dp )
+        self.cmd( 'ovs-dpctl add-dp ' + self.dp )
+        mac_str = ''
+        if self.defaultMAC:
+            # ovs-openflowd expects a string of exactly 16 hex digits with no
+            # colons.
+            mac_str = ' --datapath-id=0000' + \
+                      ''.join( self.defaultMAC.split( ':' ) ) + ' '
+        ports = sorted( self.ports.values() )
+        if len( ports ) != ports[ -1 ] + 1 - self.portBase:
+            raise Exception( 'only contiguous, one-indexed port ranges '
+                            'supported: %s' % self.intfs )
+        intfs = [ self.intfs[ port ] for port in ports ]
+        self.cmd( 'ovs-dpctl', 'add-if', self.dp, ' '.join( intfs ) )
+        # Run protocol daemon
+        self.cmd( 'ovs-openflowd ' + self.dp +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                        for c in controllers ] ) +
+            ' --fail=secure ' + self.opts + mac_str +
+            ' 1>' + ofplog + ' 2>' + ofplog + '&' )
+        self.execed = False
+
+    def stop( self ):
+        "Terminate kernel datapath."
+        quietRun( 'ovs-dpctl del-dp ' + self.dp )
+        self.cmd( 'kill %ovs-openflowd' )
+        self.deleteIntfs()
+
+    def addIntf( self, intf, port ):
+        super(OVSKernelSwitch, self).addIntf(intf, port)
+        self.cmd( 'ovs-dpctl', 'add-if', self.dp, intf )
+    
+    def deleteIntf( self, intf ):
+        super(OVSKernelSwitch, self).deleteIntf(intf)
+        self.cmd( 'ovs-dpctl', 'del-if', self.dp, intf )
         
 class OVSUserSwitch( Switch ):
     """Open VSwitch kernel-space switch.
