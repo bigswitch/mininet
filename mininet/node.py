@@ -21,8 +21,19 @@ UserSwitch: a switch using the user-space switch from the OpenFlow
 KernelSwitch: a switch using the kernel switch from the OpenFlow reference
     implementation.
 
-OVSSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
-    implementation (openvswitch.org).
+OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
+    implementation (openvswitch.org). Supports all 1.x version. Uses 
+    ovsdb-server and vswitchd (which will be started on demand if 
+    necessary.
+
+OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
+    implementation (openvswitch.org). Only works with 1.0.x and 1.1.x BUT
+    does not use ovsdb-server. For environments in which the ovsdb file
+    hasn't been set up. 
+
+OVSUserSwitch: a switch using the user-space OpenVSwitch 
+    OpenFlow-compatible switch implementation (openvswitch.org).
+    Not working.
 
 Controller: superclass for OpenFlow controllers. The default controller
     is controller(8) from the reference implementation.
@@ -51,7 +62,7 @@ from time import sleep
 
 from mininet.log import info, error, debug
 from mininet.util import quietRun, makeIntfPair, moveIntf, isShellBuiltin
-from mininet.moduledeps import moduleDeps, pathCheck, OVS_KMOD, OF_KMOD, TUN
+from mininet.moduledeps import moduleDeps, pathCheck, checkRunning, OVS_KMOD, OF_KMOD, TUN
 
 SWITCH_PORT_BASE = 1  # For OF > 0.9, switch ports start at 1 rather than zero
 
@@ -659,7 +670,7 @@ class OVSKernelSwitch( Switch ):
            dp: netlink id (0, 1, 2, ...)
            defaultMAC: default MAC as unsigned int; random value if None"""
         Switch.__init__( self, name, **kwargs )
-        self.dp = 'dp%i' % dp
+        self.dp = 'mn-dp%i' % dp
         self.intf = self.dp
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
@@ -670,6 +681,108 @@ class OVSKernelSwitch( Switch ):
     def setup():
         "Ensure any dependencies are loaded; if not, try to load them."
         moduleName='Open vSwitch (openvswitch.org)'
+        pathCheck( 'ovs-vsctl', 'ovsdb-server', 'ovs-vswitchd', moduleName=moduleName )
+        moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
+
+        if not checkRunning('ovsdb-server', 'ovs-vswitchd'):
+            ovsdb_server_cmd = ['ovsdb-server', 
+                            '--remote=punix:/tmp/mn-openvswitch-db.sock', 
+                            '--remote=db:Open_vSwitch,manager_options']
+
+            # We need to specify the DB path for OVS before 1.2.0
+            ovs_ver = quietRun('ovsdb-server -V').split('\n')[0]
+            # Note the space in front of the version strings.
+            # TODO: Maybe we should extract the version instead of 
+            #       substr matching
+            if ' 1.1.' in ovs_ver or ' 1.0.' in ovs_ver:
+                ovsdb_server_cmd.insert(1, '/usr/local/etc/openvswitch/conf.db')
+                
+            # Every OVS command *except* ovsdb-server has a default path
+            # to the database socket hardcoded. Problem is: if we need
+            # to run ovsdb-server ourselves we cannot figure out what
+            # this path is. Grr.
+            Popen(ovsdb_server_cmd, 
+                         stderr = STDOUT, stdout = open('/tmp/mn-ovsdb-server.log', "w") )
+            sleep(0.1)
+            Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
+                          stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
+            sleep(0.1)
+            OVSKernelSwitch.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
+        else:
+            OVSKernelSwitch.vsctl_cmd = 'ovs-vsctl -t 2 '
+
+        # Remove old mininet datapaths to make sure they don't interfere
+        brlist = quietRun ( OVSKernelSwitch.vsctl_cmd + ' list-br' )
+        for line in brlist.split("\n"):
+            line = line.rstrip()
+            if re.match('^mn-dp[0-9]+$', line):
+                quietRun ( OVSKernelSwitch.vsctl_cmd + ' del-br ' + line )
+                
+
+    def start( self, controllers ):
+        "Start up kernel datapath."
+        self.startIntfs()
+        # Delete local datapath if it exists;
+        # then create a new one monitoring the given interfaces
+        quietRun( self.vsctl_cmd + ' -- --if-exists del-br ' + self.dp )
+        self.cmd( self.vsctl_cmd + ' add-br ' + self.dp )
+        self.cmd( self.vsctl_cmd + ' set-fail-mode ' + self.dp + ' secure')
+        mac_str = ''
+        if self.defaultMAC:
+            # ovs-openflowd expects a string of exactly 16 hex digits with no
+            # colons.
+            dpid_str = '0000' + \
+                      ''.join( self.defaultMAC.split( ':' ) ) + ' '
+            self.cmd(self.vsctl_cmd + ' --no-wait set bridge %s other-config:datapath_type=system other-config:datapath-id=%s' % (self.dp, dpid_str))
+        ports = sorted( self.ports.values() )
+        if len( ports ) != ports[ -1 ] + 1 - self.portBase:
+            raise Exception( 'only contiguous, one-indexed port ranges '
+                            'supported: %s' % self.intfs )
+        intfs = [ self.intfs[ port ] for port in ports ]
+        for i in intfs:
+            self.cmd( self.vsctl_cmd, 'add-port', self.dp, i ) 
+        self.cmd( self.vsctl_cmd + ' set-controller ' + self.dp +
+            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                    for c in controllers ] ))
+        self.execed = False
+
+    def stop( self ):
+        "Terminate kernel datapath."
+        quietRun( self.vsctl_cmd + ' -- --if-exists del-br ' + self.dp )
+        self.deleteIntfs()
+
+    def addIntf( self, intf, port ):
+        super(OVSKernelSwitch, self).addIntf(intf, port)
+        self.cmd( self.vsctl_cmd + ' -- --may-exist', 'add-port', self.dp, intf )
+    
+    def deleteIntf( self, intf ):
+        super(OVSKernelSwitch, self).deleteIntf(intf)
+        self.cmd( self.vsctl_cmd, ' -- --if-exists', 'del-port', self.dp, intf )
+        
+class OVSKernelSwitchOld( Switch ):
+    """Open VSwitch kernel-space switch for OVS < 1.2.0
+       Currently only works in the root namespace.
+       Uses the old non ovsdb / vswitchd based user-space tools.
+       This class can eventually be removed!
+    """
+
+    def __init__( self, name, dp=None, **kwargs ):
+        """Init.
+           name: name for switch
+           dp: netlink id (0, 1, 2, ...)
+           defaultMAC: default MAC as unsigned int; random value if None"""
+        Switch.__init__( self, name, **kwargs )
+        self.dp = 'dp%i' % dp
+        self.intf = self.dp
+        if self.inNamespace:
+            error( "OVSKernelSwitch currently only works"
+                " in the root namespace.\n" )
+            exit( 1 )
+
+    @staticmethod
+    def setup():
+        "Ensure any dependencies are loaded; if not, try to load them."
+        moduleName='Open vSwitch (openvswitch.org) < 1.2.0'
         pathCheck( 'ovs-dpctl', 'ovs-openflowd', moduleName=moduleName )
         moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
 
@@ -708,16 +821,16 @@ class OVSKernelSwitch( Switch ):
         self.deleteIntfs()
 
     def addIntf( self, intf, port ):
-        super(OVSKernelSwitch, self).addIntf(intf, port)
+        super(OVSKernelSwitchOld, self).addIntf(intf, port)
         self.cmd( 'ovs-dpctl', 'add-if', self.dp, intf )
     
     def deleteIntf( self, intf ):
-        super(OVSKernelSwitch, self).deleteIntf(intf)
+        super(OVSKernelSwitchOld, self).deleteIntf(intf)
         self.cmd( 'ovs-dpctl', 'del-if', self.dp, intf )
         
 class OVSUserSwitch( Switch ):
-    """Open VSwitch kernel-space switch.
-       Currently only works in the root namespace."""
+    """Open VSwitch user-space switch.
+    """
 
     def __init__( self, name, dp=None, **kwargs ):
         """Init.

@@ -3,6 +3,7 @@
 from mininet.util import quietRun
 from mininet.log import info, error, debug
 from os import environ
+import subprocess
 
 def lsmod():
     "Return output of lsmod."
@@ -67,3 +68,15 @@ def pathCheck( *args, **kwargs ):
                 'Please make sure that %s is installed ' % moduleName +
                 'and available in your $PATH:\n(%s)\n' % environ[ 'PATH' ] )
             exit( 1 )
+
+
+def checkRunning ( *args ):
+    "Check if each program in *arg is running"
+    try:
+        for arg in args:
+            subprocess.check_output(["pgrep", arg], stderr=subprocess.STDOUT)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
