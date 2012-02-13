@@ -33,6 +33,7 @@ OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
 
 OVSUserSwitch: a switch using the user-space OpenVSwitch 
     OpenFlow-compatible switch implementation (openvswitch.org).
+    Not working.
 
 Controller: superclass for OpenFlow controllers. The default controller
     is controller(8) from the reference implementation.
@@ -828,8 +829,8 @@ class OVSKernelSwitchOld( Switch ):
         self.cmd( 'ovs-dpctl', 'del-if', self.dp, intf )
         
 class OVSUserSwitch( Switch ):
-    """Open VSwitch kernel-space switch.
-       Currently only works in the root namespace."""
+    """Open VSwitch user-space switch.
+    """
 
     def __init__( self, name, dp=None, **kwargs ):
         """Init.
