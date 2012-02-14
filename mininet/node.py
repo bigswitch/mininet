@@ -21,7 +21,7 @@ UserSwitch: a switch using the user-space switch from the OpenFlow
 KernelSwitch: a switch using the kernel switch from the OpenFlow reference
     implementation.
 
-OVSKernelSwitch: a switch using the OpenVSwitch OpenFlow-compatible switch
+OVSKernelSwitchNew: a switch using the OpenVSwitch OpenFlow-compatible switch
     implementation (openvswitch.org). Supports all 1.x version. Uses 
     ovsdb-server and vswitchd (which will be started on demand if 
     necessary.
@@ -660,7 +660,7 @@ class KernelSwitch( Switch ):
         self.deleteIntfs()
 
 
-class OVSKernelSwitch( Switch ):
+class OVSKernelSwitchNew( Switch ):
     """Open VSwitch kernel-space switch.
        Currently only works in the root namespace."""
 
@@ -707,16 +707,16 @@ class OVSKernelSwitch( Switch ):
             Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
                           stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
             sleep(0.1)
-            OVSKernelSwitch.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
+            OVSKernelSwitchNew.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
         else:
-            OVSKernelSwitch.vsctl_cmd = 'ovs-vsctl -t 2 '
+            OVSKernelSwitchNew.vsctl_cmd = 'ovs-vsctl -t 2 '
 
         # Remove old mininet datapaths to make sure they don't interfere
-        brlist = quietRun ( OVSKernelSwitch.vsctl_cmd + ' list-br' )
+        brlist = quietRun ( OVSKernelSwitchNew.vsctl_cmd + ' list-br' )
         for line in brlist.split("\n"):
             line = line.rstrip()
             if re.match('^mn-dp[0-9]+$', line):
-                quietRun ( OVSKernelSwitch.vsctl_cmd + ' del-br ' + line )
+                quietRun ( OVSKernelSwitchNew.vsctl_cmd + ' del-br ' + line )
                 
 
     def start( self, controllers ):
@@ -752,14 +752,15 @@ class OVSKernelSwitch( Switch ):
         self.deleteIntfs()
 
     def addIntf( self, intf, port ):
-        super(OVSKernelSwitch, self).addIntf(intf, port)
+        super(OVSKernelSwitchNew, self).addIntf(intf, port)
         self.cmd( self.vsctl_cmd + ' -- --may-exist', 'add-port', self.dp, intf )
     
     def deleteIntf( self, intf ):
-        super(OVSKernelSwitch, self).deleteIntf(intf)
+        super(OVSKernelSwitchNew, self).deleteIntf(intf)
         self.cmd( self.vsctl_cmd, ' -- --if-exists', 'del-port', self.dp, intf )
-        
-class OVSKernelSwitchOld( Switch ):
+
+
+class OVSKernelSwitch( Switch ):
     """Open VSwitch kernel-space switch for OVS < 1.2.0
        Currently only works in the root namespace.
        Uses the old non ovsdb / vswitchd based user-space tools.
@@ -821,11 +822,11 @@ class OVSKernelSwitchOld( Switch ):
         self.deleteIntfs()
 
     def addIntf( self, intf, port ):
-        super(OVSKernelSwitchOld, self).addIntf(intf, port)
+        super(OVSKernelSwitch, self).addIntf(intf, port)
         self.cmd( 'ovs-dpctl', 'add-if', self.dp, intf )
     
     def deleteIntf( self, intf ):
-        super(OVSKernelSwitchOld, self).deleteIntf(intf)
+        super(OVSKernelSwitch, self).deleteIntf(intf)
         self.cmd( 'ovs-dpctl', 'del-if', self.dp, intf )
         
 class OVSUserSwitch( Switch ):
@@ -883,6 +884,7 @@ class OVSUserSwitch( Switch ):
         # quietRun( 'ovs-dpctl del-dp ' + self.dp )
         self.cmd( 'kill %ovs-openflowd' )
         self.deleteIntfs()
+
 
 class RemoteSwitch( Switch ):
     "Switch created outside mininet."

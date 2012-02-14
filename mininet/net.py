@@ -94,7 +94,7 @@ from time import sleep
 
 from mininet.cli import CLI
 from mininet.log import info, error, debug, output
-from mininet.node import Host, Switch, UserSwitch, OVSKernelSwitch, RemoteSwitch
+from mininet.node import Host, Switch, UserSwitch, OVSKernelSwitch, OVSKernelSwitchNew, RemoteSwitch
 from mininet.node import Controller, ControllerParams
 from mininet.util import quietRun, fixLimits
 from mininet.util import createLink, macColonHex, ipStr, ipParse
@@ -581,7 +581,7 @@ class Mininet( object ):
             error('%s is not a switch' % switchName)
             return
             
-        if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchOld):
+        if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchNew):
             error('attachHost only works with OVS kernel switches')
             return
             
@@ -618,7 +618,7 @@ class Mininet( object ):
                 error('%s is not a switch' % switchName)
                 return
                 
-            if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchOld):
+            if not isinstance(sw, OVSKernelSwitch) and not isinstance(sw, OVSKernelSwitchNew):
                 error('attachHost only works with OVS kernel switches')
                 return
         else:
