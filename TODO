@@ -1,0 +1,6 @@
+Cleanup: Mininet can leave processes behind when it exits. For normal
+termination we solved this using and atexit handler. However we still
+need to cover:
+   * Termination due to signals 
+   * Another program instantiates its own Mininet() instance instead 
+     of using mn. 
