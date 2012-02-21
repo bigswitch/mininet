@@ -57,6 +57,7 @@ import pty
 import re
 import signal
 import select
+import sys
 from subprocess import Popen, PIPE, STDOUT
 from time import sleep
 
@@ -701,11 +702,17 @@ class OVSKernelSwitchNew( Switch ):
             # to the database socket hardcoded. Problem is: if we need
             # to run ovsdb-server ourselves we cannot figure out what
             # this path is. Grr.
-            Popen(ovsdb_server_cmd, 
+            ovsdb_instance = Popen(ovsdb_server_cmd, 
                          stderr = STDOUT, stdout = open('/tmp/mn-ovsdb-server.log', "w") )
             sleep(0.1)
-            Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
+            if ovsdb_instance.poll() is not None:
+                error("ovsdb-server was not running and we could not start it - exiting\n")
+                sys.exit(1)
+            vswitchd_instance = Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
                           stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
+            if vswitchd_instance.poll() is not None:
+                error("ovs-vswitchd was not running and we could not start it - exiting\n")
+                sys.exit(1)
             sleep(0.1)
             OVSKernelSwitchNew.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
         else:
