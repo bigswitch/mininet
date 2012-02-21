@@ -88,10 +88,15 @@ def atexitProcessCleanup():
     if pid == 0:
         pgrp = os.getpgrp()
         os.setsid()
+        # Let's try to sleep for a tiny bit of time so the parent
+        # gets scheduled and exits before we kill it. It's not a problem
+        # if we kill the parent but we will get an annoying "Terminated"
+        # in the terminal.
+        time.sleep(0.05)
         killpg_wrapper(pgrp, signal.SIGTERM)
-        time.sleep(0.2)
+        time.sleep(0.15)
         killpg_wrapper(pgrp, signal.SIGHUP)
-        time.sleep(0.2)
+        time.sleep(0.15)
         killpg_wrapper(pgrp, signal.SIGKILL)
 
 
@@ -139,12 +144,12 @@ class MininetRunner( object ):
 
     def __init__( self ):
         "Init."
-        atexit.register(atexitProcessCleanup)
         self.options = None
         self.args = None  # May be used someday for more CLI scripts
         self.validate = None
 
         self.parseArgs()
+        atexit.register(atexitProcessCleanup)
         self.setup()
         self.begin()
 
