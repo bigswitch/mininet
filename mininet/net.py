@@ -198,8 +198,12 @@ class Mininet( object ):
             controller = self.controller
         controller_new = controller( name, **kwargs )
         if controller_new:  # allow controller-less setups
-            self.controllers.append( controller_new )
-            self.nameToNode[ name ] = controller_new
+            controller_list_new = controller_new
+            if not isinstance(controller_list_new, (list, tuple)):
+                controller_list_new = (controller_new,)
+            for c in controller_list_new:
+                self.controllers.append( c )
+                self.nameToNode[ c.name ] = c
         return controller_new
 
     # Control network support:

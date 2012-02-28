@@ -263,9 +263,16 @@ class MininetRunner( object ):
         host = HOSTS[ self.options.host ]
         controller = CONTROLLERS[ self.options.controller ]
         if self.options.controller == 'remote':
-            controller = lambda a: RemoteController( a,
-                             defaultIP=self.options.ip,
-                             port=self.options.port )
+            ipList = self.options.ip.split(',')
+            ipPortList = []
+            for ip in ipList:
+                ipPort = ip.split(":")
+                if len(ipPort) < 2:
+                    ipPort.append(self.options.port)
+                ipPortList.append(ipPort)
+            controller = lambda a: [RemoteController( a+"-"+str(i),
+                             defaultIP=ip,
+                             port=int(port) ) for i,(ip,port) in enumerate(ipPortList)]
 
         if self.validate:
             self.validate( self.options )
