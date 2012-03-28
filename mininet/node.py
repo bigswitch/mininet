@@ -44,6 +44,8 @@ RemoteController: a remote controller node, which may use any
     arbitrary OpenFlow-compatible controller, and which is not
     created or managed by mininet.
 
+LinuxBridge: a non-openflow switch that simply uses a linux bridge interface
+
 Future enhancements:
 
 - Possibly make Node, Switch and Controller more abstract so that
@@ -558,6 +560,55 @@ class Switch( Node ):
             error( '*** Error: %s has execed and cannot accept commands' %
                      self.name )
 
+class LinuxBridge( Switch ):
+    "Linux bridge"
+
+    def __init__ ( self, name, **kwargs ):
+        """Init.
+           name: name for switch"""
+        Switch.__init__( self, name, **kwargs )
+        self.dp = "lxbr-%s" % name
+        self.intf = self.dp
+        
+    @staticmethod
+    def setup():
+        pathCheck('brctl')
+
+    def start(self, controllers):
+        brlist = quietRun('brctl show')
+        for line in brlist.split("\n"):
+            line = line.rstrip()
+            m = re.match('^lxbr-(\w+)', line)
+            if (m):
+                print "Cleaning old bridge lxbr-%s" % m.group(1)
+                self.cmd ('brctl', 'delbr', 'lxbr-%s' % m.group(1))
+
+        self.startIntfs()
+        self.cmd('brctl', 'addbr', self.dp)
+        self.cmd('brctl', 'stp', self.dp, 'on')
+        for port, intf in self.intfs.items():
+            self.doadd(intf)
+        self.cmd('ifconfig', self.dp, 'up')
+        self.cmd('brctl', 'setfd', self.dp, '2')
+
+    def stop( self ):
+        "Terminate kernel datapath."
+        self.deleteIntfs()
+        self.cmd('ifconfig', self.dp, 'down')
+        self.cmd('brctl', 'delbr', self.dp)
+
+    def doadd ( self, intf ):
+        self.cmd('brctl', 'addif', self.dp, intf)
+
+    def addIntf( self, intf, port ):
+        super(LinuxBridge, self).addIntf(intf, port)
+        self.doadd(intf)
+    
+    def deleteIntf( self, intf ):
+        super(LinuxBridge, self).deleteIntf(intf)
+        self.cmd('brctl', 'delif', self.dp, intf)
+
+
 class UserSwitch( Switch ):
     "User-space switch."
 
@@ -576,7 +627,7 @@ class UserSwitch( Switch ):
         if not os.path.exists( '/dev/net/tun' ):
             moduleDeps( add=TUN )
 
-    def start( self, controllers ):
+    def start( self, controllers, failopen=False ):
         """Start OpenFlow reference user datapath.
            Log to /tmp/sN-{ofd,ofp}.log.
            controllers: list of controller objects"""
@@ -726,14 +777,17 @@ class OVSKernelSwitchNew( Switch ):
                 quietRun ( OVSKernelSwitchNew.vsctl_cmd + ' del-br ' + line )
                 
 
-    def start( self, controllers ):
+    def start( self, controllers, failopen=False ):
         "Start up kernel datapath."
         self.startIntfs()
         # Delete local datapath if it exists;
         # then create a new one monitoring the given interfaces
         quietRun( self.vsctl_cmd + ' -- --if-exists del-br ' + self.dp )
         self.cmd( self.vsctl_cmd + ' add-br ' + self.dp )
-        self.cmd( self.vsctl_cmd + ' set-fail-mode ' + self.dp + ' secure')
+        failmode = 'secure'
+        if (failopen):
+            failmode = 'standalone'
+        self.cmd('%s set-fail-mode %s %s '  % (self.vsctl_cmd, self.dp, failmode))
         mac_str = ''
         if self.defaultMAC:
             # ovs-openflowd expects a string of exactly 16 hex digits with no
@@ -748,9 +802,10 @@ class OVSKernelSwitchNew( Switch ):
         intfs = [ self.intfs[ port ] for port in ports ]
         for i in intfs:
             self.cmd( self.vsctl_cmd, 'add-port', self.dp, i ) 
-        self.cmd( self.vsctl_cmd + ' set-controller ' + self.dp +
-            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
-                    for c in controllers ] ))
+        if (controllers != None and len(controllers)):
+            self.cmd( self.vsctl_cmd + ' set-controller ' + self.dp +
+                      ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+                      for c in controllers ] ))
         self.execed = False
 
     def stop( self ):

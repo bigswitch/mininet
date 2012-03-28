@@ -161,19 +161,23 @@ class Mininet( object ):
         self.nameToNode[ name ] = host
         return host
 
-    def addSwitch( self, name, mac=None, ip=None, prefix='s' ):
+    def addSwitch( self, name, mac=None, ip=None, prefix='s', switchClass=None ):
         """Add switch.
            name: name of switch to add
            mac: default MAC address for kernel/OVS switch intf 0
            returns: added switch
            side effect: increments the listenPort member variable."""
-        if self.switch == UserSwitch:
-            sw = self.switch( name, listenPort=self.listenPort,
-                defaultMAC=mac, defaultIP=ip, inNamespace=self.inNamespace, prefix=prefix )
+        swCl = switchClass
+        if (swCl is None):
+            swCl = self.switch
+        if swCl == UserSwitch:
+            sw = swCl( name, listenPort=self.listenPort,
+                       defaultMAC=mac, defaultIP=ip, 
+                       inNamespace=self.inNamespace, prefix=prefix )
         else:
-            sw = self.switch( name, listenPort=self.listenPort,
-                defaultMAC=mac, defaultIP=ip, dp=self.dps,
-                inNamespace=self.inNamespace , prefix=prefix )
+            sw = swCl( name, listenPort=self.listenPort,
+                       defaultMAC=mac, defaultIP=ip, dp=self.dps,
+                       inNamespace=self.inNamespace , prefix=prefix )
         if not self.inNamespace and self.listenPort:
             self.listenPort += 1
         self.dps += 1
