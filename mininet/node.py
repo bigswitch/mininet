@@ -573,8 +573,6 @@ class LinuxBridge( Switch ):
     @staticmethod
     def setup():
         pathCheck('brctl')
-
-    def start(self, controllers):
         brlist = quietRun('brctl show')
         for line in brlist.split("\n"):
             line = line.rstrip()
@@ -583,6 +581,7 @@ class LinuxBridge( Switch ):
                 print "Cleaning old bridge lxbr-%s" % m.group(1)
                 self.cmd ('brctl', 'delbr', 'lxbr-%s' % m.group(1))
 
+    def start(self, controllers):
         self.startIntfs()
         self.cmd('brctl', 'addbr', self.dp)
         self.cmd('brctl', 'stp', self.dp, 'on')
