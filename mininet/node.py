@@ -611,6 +611,8 @@ class LinuxBridge( Switch ):
 class UserSwitch( Switch ):
     "User-space switch."
 
+    saved_contr = None
+
     def __init__( self, name, **kwargs ):
         """Init.
            name: name for the switch"""
@@ -626,10 +628,12 @@ class UserSwitch( Switch ):
         if not os.path.exists( '/dev/net/tun' ):
             moduleDeps( add=TUN )
 
-    def start( self, controllers, failopen=False ):
+    def start( self, controllers):
         """Start OpenFlow reference user datapath.
            Log to /tmp/sN-{ofd,ofp}.log.
            controllers: list of controller objects"""
+        self.saved_contr = controllers
+
         ofdlog = '/tmp/' + self.name + '-ofd.log'
         ofplog = '/tmp/' + self.name + '-ofp.log'
         self.startIntfs()
@@ -649,11 +653,27 @@ class UserSwitch( Switch ):
             ' --fail=closed ' + self.opts +
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
 
-    def stop( self ):
-        "Stop OpenFlow reference user datapath."
+    def stopprocs( self ):
         self.cmd( 'kill %ofdatapath' )
         self.cmd( 'kill %ofprotocol' )
+
+    def restart( self ):
+        if (self.saved_contr):
+            self.stopprocs()
+            self.start(self.saved_contr)
+        
+    def stop( self ):
+        "Stop OpenFlow reference user datapath."
+        self.stopprocs()
         self.deleteIntfs()
+
+    def addIntf( self, intf, port ):
+        super(UserSwitch, self).addIntf(intf, port)
+        self.restart()
+    
+    def deleteIntf( self, intf ):
+        super(UserSwitch, self).deleteIntf(intf)
+        self.restart()
 
 class KernelSwitch( Switch ):
     """Kernel-space switch.
