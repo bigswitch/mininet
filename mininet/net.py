@@ -449,7 +449,7 @@ class Mininet( object ):
         sent, received = int( m.group( 1 ) ), int( m.group( 2 ) )
         return sent, received
 
-    def ping( self, hosts=None ):
+    def ping( self, hosts=None, numPerPing=1 ):
         """Ping between all specified hosts.
            hosts: list of hosts
            returns: ploss packet loss percentage"""
@@ -464,7 +464,7 @@ class Mininet( object ):
             output( '%s -> ' % node.name )
             for dest in hosts:
                 if node != dest:
-                    result = node.cmd( 'ping -c1 -W 1 ' + dest.IP() )
+                    result = node.cmd( 'ping -c%d -W 1 %s' % (numPerPing, dest.IP()) )
                     sent, received = self._parsePing( result )
                     packets += sent
                     if received > sent:
@@ -480,10 +480,10 @@ class Mininet( object ):
                 ( ploss, lost, packets ) )
         return ploss
 
-    def pingAll( self ):
+    def pingAll( self, numPerPing=1):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
-        return self.ping()
+        return self.ping(numPerPing=numPerPing)
 
     def pingPair( self ):
         """Ping between first two hosts, useful for testing.

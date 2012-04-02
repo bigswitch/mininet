@@ -145,7 +145,19 @@ class CLI( Cmd ):
 
     def do_pingall( self, line ):
         "Ping between all hosts."
-        self.mn.pingAll()
+        args = line.split()
+        numPerPing = 1
+        if args: 
+            if len(args) == 1:
+                try:
+                    numPerPing = int(args[0])
+                except ValueError:
+                    error( 'invalid arg: ping numberPacketPerPing, where numberPacketPerPing is a number.\n')
+                    return
+            else:
+                error( 'invalid number of args: ping numberPacketPerPing\n')
+                return
+        self.mn.pingAll(numPerPing=numPerPing)
 
     def do_pingpair( self, line ):
         "Ping between first two hosts, useful for testing."
