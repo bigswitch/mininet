@@ -647,8 +647,8 @@ class UserSwitch( Switch ):
         self.cmd( 'ofdatapath -i ' + ','.join( intfs ) +
             ' punix:/tmp/' + self.name + mac_str + ' --no-slicing ' +
             ' 1> ' + ofdlog + ' 2> ' + ofdlog + ' &' )
-        self.cmd( 'ofprotocol unix:/tmp/' + self.name +
-            ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
+        self.cmd( 'ofprotocol unix:/tmp/' + self.name + ' ' +
+            ','.join( [ 'tcp:%s:%d' % ( c.IP(), c.port ) \
                         for c in controllers ] ) +
             ' --fail=closed ' + self.opts +
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
