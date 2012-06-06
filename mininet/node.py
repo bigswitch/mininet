@@ -607,6 +607,9 @@ class LinuxBridge( Switch ):
         super(LinuxBridge, self).deleteIntf(intf)
         self.cmd('brctl', 'delif', self.dp, intf)
 
+    def killjob( self, job ):
+        self.cmd('kill %s' % job)
+        self.cmd('if jobs -l %s; then sleep 1; kill -9 %s; fi' % (job, job))
 
 class UserSwitch( Switch ):
     "User-space switch."
@@ -619,8 +622,8 @@ class UserSwitch( Switch ):
         Switch.__init__( self, name, **kwargs )
         pathCheck( 'ofdatapath', 'ofprotocol',
             moduleName='the OpenFlow reference user switch (openflow.org)' )
-        self.cmd( 'kill %ofdatapath' )
-        self.cmd( 'kill %ofprotocol' )
+        self.killjob('%ofdatapath')
+        self.killjob('%ofprotocol')
 
     @staticmethod
     def setup():
@@ -654,8 +657,8 @@ class UserSwitch( Switch ):
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
 
     def stopprocs( self ):
-        self.cmd( 'kill %ofdatapath' )
-        self.cmd( 'kill %ofprotocol' )
+        self.killjob('%ofdatapath')
+        self.killjob('%ofprotocol')
 
     def restart( self ):
         if (self.saved_contr):
