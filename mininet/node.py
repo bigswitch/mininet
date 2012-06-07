@@ -607,10 +607,6 @@ class LinuxBridge( Switch ):
         super(LinuxBridge, self).deleteIntf(intf)
         self.cmd('brctl', 'delif', self.dp, intf)
 
-    def killjob( self, job ):
-        self.cmd('kill %s' % job)
-        self.cmd('if jobs -l %s; then sleep 1; kill -9 %s; fi' % (job, job))
-
 class UserSwitch( Switch ):
     "User-space switch."
 
@@ -655,6 +651,10 @@ class UserSwitch( Switch ):
                         for c in controllers ] ) +
             ' --fail=closed ' + self.opts +
             ' 1> ' + ofplog + ' 2>' + ofplog + ' &' )
+
+    def killjob( self, job ):
+        self.cmd('kill %s' % job)
+        self.cmd('if jobs -l %s; then sleep 1; kill -9 %s; fi' % (job, job))
 
     def stopprocs( self ):
         self.killjob('%ofdatapath')
