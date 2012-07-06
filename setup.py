@@ -42,7 +42,9 @@ setuptools.setup(
     ],
     scripts=[
         'bin/mn',
-        'bin/mnexec'
+        'bin/mnexec',
+        'bin/mn-tcptest-srv.py',
+        'bin/mn-tcptest-cli.py'
     ],
     cmdclass={"build_scripts": build_scripts,
               "clean": clean}
