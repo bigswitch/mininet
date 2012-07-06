@@ -466,6 +466,7 @@ class Node( object ):
 
     _ipMatchRegex = re.compile( r'\d+\.\d+\.\d+\.\d+' )
     _macMatchRegex = re.compile( r'..:..:..:..:..:..' )
+    _ipSubnetMatchRegex = re.compile( r'(\d+\.\d+\.\d+\.\d+)/(\d+)' )
 
     def IP( self, intf=None ):
         "Return IP address of a node or specific interface."
@@ -513,9 +514,32 @@ class Node( object ):
         return '%s: IP=%s intfs=%s pid=%s' % (
             self.name, self.IP(), ','.join( intfs ), self.pid )
 
-
 class Host( Node ):
     "A host is simply a Node."
+
+    def addvlan( self, vlan):
+        """Add a vlan to a host. Replace the current default interface"""
+        assert not self.waiting
+        intf = self.defaultIntf()
+        x = self.cmd("ip addr show %s" % intf)
+        res = self._ipSubnetMatchRegex.search(x) 
+        if res == None:
+            error("Could not read current IP/prefixLen from interface")
+            return
+        try:
+            ip = res.group(1)
+            prefixLen = res.group(2)
+        except IndexError:
+            error("Could not read current IP/prefixLen from interface")
+            return
+        self.cmd("ifconfig %s inet 0.0.0.0" % intf)
+        self.cmd("vconfig add %s %d" % (intf, vlan))
+        self.cmd("ifconfig %s.%d inet %s/%s" % (intf, vlan, ip, prefixLen) )
+        # Make the new vlan interface the default intf
+        port = self.ports[intf]
+        intf = "%s.%d" % (intf, vlan)
+        self.intfs[ port ] = intf
+        self.ports[ intf ] = port
 
 
 class Switch( Node ):
