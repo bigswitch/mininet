@@ -515,8 +515,8 @@ class Mininet( object ):
             return "OK"
         return "?"
         
-
-    def tcptest( self, hosts=None, timeout=0.25 ):
+    _listenRegex = re.compile("LISTENING")
+    def tcptest( self, hosts=None, timeout=0.3 ):
         """TCP reachability test
            hosts: list of hosts. 
            timeout: TCP connection and read timeout in seconds
@@ -543,15 +543,17 @@ class Mininet( object ):
             for dest in hosts:
                 if node != dest:
                     total += 1
-                    # We need to add a small sleep after each command to make sure 
-                    # the new process gets scheduled and can do its jobs 
-                    dest.sendCmd("mn-tcptest-srv.py %f %d" % (timeout, self.curTcpPort))
-                    sleep(0.01)
+                    srvResult = dest.sendCmd("mn-tcptest-srv.py %f %d" % (timeout, self.curTcpPort))
+                    dest.waitOutput(pattern = self._listenRegex)
                     cliResult = node.cmd( 'mn-tcptest-cli.py %f %s %d' % (timeout, dest.IP(), self.curTcpPort) )
                     sleep(0.01)
-                    # Make sure server process is done
+                    # Make sure server process is done. Need the sleep to give the 
+                    # server time to terminate
                     dest.sendInt()
-                    srvResult = dest.waitOutput()
+                    if dest.waiting:
+                        # could be false if the early waitOutput call
+                        # retunred an error
+                        srvResult = dest.waitOutput()
                     cliResult = self._parseTcpOutput(cliResult)
                     srvResult = self._parseTcpOutput(srvResult)
                     if cliResult == "OK" and srvResult == "OK":

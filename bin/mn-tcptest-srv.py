@@ -1,4 +1,4 @@
-#!/home/gregor/work/addr-space/ve/bin/python
+#!/usr/bin/env python
 
 # Used by mininet for the tcp command (testing tcp connectivity between
 # hosts)
@@ -20,6 +20,7 @@ try:
     s.bind((HOST, PORT))
     s.listen(1)
     s.settimeout(TIMEOUT)
+    print "LISTENING"
     conn, addr = s.accept()
 except socket.timeout:
     print "CONN TIMEOUT"
