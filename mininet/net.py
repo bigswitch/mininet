@@ -143,6 +143,12 @@ class Mininet( object ):
         self.dps = 0  # number of created kernel datapaths
         self.terms = []  # list of spawned xterm processes
 
+        # current port to use for TCP testing. 
+        # will be incremented for each test
+        self.minTcpPort = 33000
+        self.curTcpPort = self.minTcpPort 
+        self.maxTcpPort = 39000
+
         init()
         switch.setup()
 
@@ -485,11 +491,95 @@ class Mininet( object ):
            returns: ploss packet loss percentage"""
         return self.ping(numPerPing=numPerPing)
 
+
     def pingPair( self ):
         """Ping between first two hosts, useful for testing.
            returns: ploss packet loss percentage"""
         hosts = [ self.hosts[ 0 ], self.hosts[ 1 ] ]
         return self.ping( hosts=hosts )
+
+    @staticmethod 
+    def _parseTcpOutput ( result ):
+        # TODO: we might want to actually extract the error
+        # message to see if this is indeed a connectivity 
+        # issue or something else. E.g., ENOBUFS
+        if "CONN TIMEOUT" in result:
+            return "C"
+        if "CONN ERROR" in result:
+            return "C"
+        if "XFER TIMEOUT" in result:
+            return "X"
+        if "XFER ERROR" in result:
+            return "X"
+        if "OK" in result:
+            return "OK"
+        return "?"
+        
+    _listenRegex = re.compile("LISTENING")
+    def tcptest( self, hosts=None, timeout=0.3 ):
+        """TCP reachability test
+           hosts: list of hosts. 
+           timeout: TCP connection and read timeout in seconds
+           returns: percentage of unsuccessful connections"""
+        # We use custom TCP server and clients. We don't use netcat since 
+        # netcat lacks the ability to fine-tune timeouts and to have 
+        # time-outs < 1sec. We want both so we can fail-fast.
+        #
+        # We also use a new TCP port for each test. This way we are really sure
+        # we are talking to the right endpoint. Alternatively we could also 
+        # send a magic number / token in the TCP payload....
+        #
+        # TODO: We use fairly low timeouts at the moment. If we find
+        # intermittant errors we might have to use long timeouts
+
+        # should we check if running?
+        total = 0
+        success = 0 
+        if not hosts:
+            hosts = self.hosts
+            output( '*** TCP: testing TCP reachability\n' )
+        for node in hosts:
+            output( '%s -> ' % node.name )
+            for dest in hosts:
+                if node != dest:
+                    total += 1
+                    srvResult = dest.sendCmd("mn-tcptest-srv.py %f %d" % (timeout, self.curTcpPort))
+                    dest.waitOutput(pattern = self._listenRegex)
+                    cliResult = node.cmd( 'mn-tcptest-cli.py %f %s %d' % (timeout, dest.IP(), self.curTcpPort) )
+                    sleep(0.01)
+                    # Make sure server process is done. Need the sleep to give the 
+                    # server time to terminate
+                    dest.sendInt()
+                    if dest.waiting:
+                        # could be false if the early waitOutput call
+                        # retunred an error
+                        srvResult = dest.waitOutput()
+                    cliResult = self._parseTcpOutput(cliResult)
+                    srvResult = self._parseTcpOutput(srvResult)
+                    if cliResult == "OK" and srvResult == "OK":
+                        # everything ok
+                        resCode = dest.name
+                        success += 1
+                    elif cliResult != "OK" and srvResult != "OK":
+                        # error from both. That's what we expect
+                        resCode = cliResult
+                    else:
+                        # Weird. Only one error? 
+                        resCode = cliResult + srvResult
+                        resCode = resCode.replace("OK","O")
+
+                    output( '%s ' % resCode ) 
+
+                    self.curTcpPort += 1
+                    if (self.curTcpPort > self.maxTcpPort):
+                        self.curTcpPort = self.minTcpPort
+            output( '\n' )
+
+        ploss = 100 * (total-success) / total
+        output( "*** Results: %i%% unsuccessful (%d/%d lost)\n" %
+                ( ploss, (total-success), total ) )
+        return ploss
+
 
     @staticmethod
     def _parseIperf( iperfOutput ):

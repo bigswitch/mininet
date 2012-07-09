@@ -30,6 +30,7 @@ from cmd import Cmd
 from os import isatty
 from select import poll, POLLIN
 import sys
+import re
 
 from mininet.log import info, output, error
 from mininet.term import makeTerms
@@ -163,11 +164,13 @@ class CLI( Cmd ):
         "Ping between first two hosts, useful for testing."
         self.mn.pingPair()
 
-    def do_pingset (self, line ):
-        "Ping between all hosts in a set."
+
+    def _getHostSet ( self, line ):
+        "Get a list of hosts from a line"
         args = line.split()
         if not args or len(args) < 2:
             error( "requires at least two hosts specified" )
+            return None
         else:
             hosts = []
             err = False
@@ -178,8 +181,30 @@ class CLI( Cmd ):
                 else:
                     hosts.append( self.nodemap[ arg ] )
             if not err:
-                self.mn.ping( hosts )
+                return hosts
+        return None
 
+
+    def do_pingset (self, line ):
+        "Ping between all hosts in a set."
+        hosts = self._getHostSet(line)
+        if hosts != None:
+            self.mn.ping ( hosts )
+
+            
+    def do_tcpall (self, line):
+        if line != "":
+            error( "invalid number of arguments. tcpall doesn't take any ")
+            return
+        self.mn.tcptest()
+
+
+    def do_tcpset (self, line ):
+        "TCP between all hosts in a set."
+        hosts = self._getHostSet(line)
+        if hosts != None:
+            self.mn.tcptest ( hosts )
+            
     def do_iperf( self, line ):
         "Simple iperf TCP test between two (optionally specified) hosts."
         args = line.split()
@@ -330,6 +355,27 @@ class CLI( Cmd ):
             output( '*** ' + sw.name + ' ' + ('-' * 72) + '\n' )
             output( sw.cmd( 'dpctl ' + ' '.join(args) +
                             ' tcp:127.0.0.1:%i' % sw.listenPort ) )
+
+    def do_addvlan( self, line):
+        """Add a vlan to the main interface of a host"""
+        args = line.split()
+        if len(args)!=2:
+            error('usage: addvlan host vlanid\n')
+            return
+        host = None
+        for tmphost in self.mn.hosts:
+            if tmphost.name == args[0]:
+                host = tmphost
+                break
+        if host == None:
+            error("Invalid host %s specified\n" % args[0])
+            return;
+        try:
+            vlan = int(args[1])
+        except ValueError:
+            error("vlanid %d is not a valid integer\n" % args[1])
+        host.addvlan(vlan)
+
 
     def default( self, line ):
         """Called on an input line when the command prefix is not recognized.
