@@ -504,11 +504,11 @@ class Mininet( object ):
         # message to see if this is indeed a connectivity 
         # issue or something else. E.g., ENOBUFS
         if "CONN TIMEOUT" in result:
-            return "C"
+            return "c"
         if "CONN ERROR" in result:
             return "C"
         if "XFER TIMEOUT" in result:
-            return "X"
+            return "x"
         if "XFER ERROR" in result:
             return "X"
         if "OK" in result:
@@ -543,7 +543,13 @@ class Mininet( object ):
             for dest in hosts:
                 if node != dest:
                     total += 1
-                    srvResult = dest.sendCmd("mn-tcptest-srv.py %f %d" % (timeout, self.curTcpPort))
+
+                    #
+                    # Use a larger timeout for the server, as we do not want
+                    # the server to timeout before the client gets a chance
+                    # send the packets.
+                    #
+                    srvResult = dest.sendCmd("mn-tcptest-srv.py %f %d" % (timeout * 10, self.curTcpPort))
                     dest.waitOutput(pattern = self._listenRegex)
                     cliResult = node.cmd( 'mn-tcptest-cli.py %f %s %d' % (timeout, dest.IP(), self.curTcpPort) )
                     sleep(0.01)
