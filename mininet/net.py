@@ -503,6 +503,10 @@ class Mininet( object ):
         # TODO: we might want to actually extract the error
         # message to see if this is indeed a connectivity 
         # issue or something else. E.g., ENOBUFS
+
+        if result == None:
+            return "?"
+
         if "CONN TIMEOUT" in result:
             return "c"
         if "CONN ERROR" in result:
