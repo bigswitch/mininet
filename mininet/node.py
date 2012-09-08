@@ -762,6 +762,10 @@ class OVSKernelSwitchNew( Switch ):
     """Open VSwitch kernel-space switch.
        Currently only works in the root namespace."""
 
+    numSwitch = 0
+    ovsdbServerPid = None
+    ovsVswitchdPid = None
+
     def __init__( self, name, dp=None, **kwargs ):
         """Init.
            name: name for switch
@@ -770,6 +774,7 @@ class OVSKernelSwitchNew( Switch ):
         Switch.__init__( self, name, **kwargs )
         self.dp = 'mn-dp%i' % dp
         self.intf = self.dp
+        OVSKernelSwitchNew.numSwitch += 1
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
                 " in the root namespace.\n" )
@@ -780,38 +785,61 @@ class OVSKernelSwitchNew( Switch ):
         "Ensure any dependencies are loaded; if not, try to load them."
         moduleName='Open vSwitch (openvswitch.org)'
         pathCheck( 'ovs-vsctl', 'ovsdb-server', 'ovs-vswitchd', moduleName=moduleName )
-        moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
+
+        output = quietRun('ovs-vsctl --version')
+        if "1.7" in output:
+            # The kernel module name is changed some time in 2012
+            # http://openvswitch.org/cgi-bin/gitweb.cgi?p=openvswitch;
+            # a=commitdiff;h=9b80f761bed9a32c1b0eb22ee3361966057ea973
+            moduleDeps( subtract=OF_KMOD, add="openvswitch", moduleName=moduleName )
+        else:
+            moduleDeps( subtract=OF_KMOD, add=OVS_KMOD, moduleName=moduleName )
 
         if not checkRunning('ovsdb-server', 'ovs-vswitchd'):
-            ovsdb_server_cmd = ['ovsdb-server', 
-                            '--remote=punix:/tmp/mn-openvswitch-db.sock', 
-                            '--remote=db:Open_vSwitch,manager_options']
+            # db, socket, pid, log file paths
+            ovsInstanceDir = "/var/run/openvswitch"
+            quietRun('mkdir -p %s' % ovsInstanceDir)
+            confDbPath = "%s/conf.db" % ovsInstanceDir
+            dbSockPath = "%s/db.sock" % ovsInstanceDir
+            ovsdbServerPidPath = "%s/ovsdb-server.pid" % ovsInstanceDir
+            ovsdbServerLogPath = "%s/ovsdb-server.log" % ovsInstanceDir
+            ovsVswitchdPidPath = "%s/ovs-vswitchd.pid" % ovsInstanceDir
+            ovsVswitchdLogPath = "%s/ovs-vswitchd.log" % ovsInstanceDir
 
-            # We need to specify the DB path for OVS before 1.2.0
-            ovs_ver = quietRun('ovsdb-server -V').split('\n')[0]
-            # Note the space in front of the version strings.
-            # TODO: Maybe we should extract the version instead of 
-            #       substr matching
-            if ' 1.1.' in ovs_ver or ' 1.0.' in ovs_ver:
-                ovsdb_server_cmd.insert(1, '/usr/local/etc/openvswitch/conf.db')
-                
-            # Every OVS command *except* ovsdb-server has a default path
-            # to the database socket hardcoded. Problem is: if we need
-            # to run ovsdb-server ourselves we cannot figure out what
-            # this path is. Grr.
-            ovsdb_instance = Popen(ovsdb_server_cmd, 
-                         stderr = STDOUT, stdout = open('/tmp/mn-ovsdb-server.log', "w") )
-            sleep(0.1)
-            if ovsdb_instance.poll() is not None:
-                error("ovsdb-server was not running and we could not start it - exiting\n")
-                sys.exit(1)
-            vswitchd_instance = Popen(['ovs-vswitchd', 'unix:/tmp/mn-openvswitch-db.sock'],
-                          stderr = STDOUT, stdout = open('/tmp/mn-vswitchd.log', "w") )
-            if vswitchd_instance.poll() is not None:
-                error("ovs-vswitchd was not running and we could not start it - exiting\n")
-                sys.exit(1)
-            sleep(0.1)
-            OVSKernelSwitchNew.vsctl_cmd = 'ovs-vsctl -t 2 --db=unix:/tmp/mn-openvswitch-db.sock '
+            # Create ovs database
+            quietRun("ovsdb-tool create %s" % confDbPath)
+
+            # Start ovsdb-server
+            ovsdb_instance = Popen(['ovsdb-server',
+                                    confDbPath,
+                                    '--remote=punix:%s' % dbSockPath,
+                                    '--remote=db:Open_vSwitch,manager_options',
+                                    '--detach',
+                                    '--pidfile=%s' % ovsdbServerPidPath,
+                                    '--log-file=%s' % ovsdbServerLogPath],
+                                   stderr = sys.stderr,
+                                   stdout = sys.stdout)
+            assert ovsdb_instance.wait() == 0
+
+            # Start ovs-vswitchd
+            vswitchd_instance = Popen(['ovs-vswitchd',
+                                       'unix:%s' % dbSockPath,
+                                       '--detach',
+                                       '--pidfile=%s' % ovsVswitchdPidPath,
+                                       '--log-file=%s' % ovsVswitchdLogPath],
+                                      stderr = sys.stderr,
+                                      stdout = sys.stdout)
+            assert vswitchd_instance.wait() == 0
+
+            # Append ovs-vsctl with database information
+            OVSKernelSwitchNew.vsctl_cmd = \
+                'ovs-vsctl -t 2 --db=unix:%s ' % dbSockPath
+
+            # Save the pids of ovsdb-server and ovs-vswitchd
+            OVSKernelSwitchNew.ovsdbServerPid = \
+                int(file(ovsdbServerPidPath).read().strip())
+            OVSKernelSwitchNew.ovsVswitchdPid = \
+                int(file(ovsVswitchdPidPath).read().strip())
         else:
             OVSKernelSwitchNew.vsctl_cmd = 'ovs-vsctl -t 2 '
 
@@ -821,7 +849,7 @@ class OVSKernelSwitchNew( Switch ):
             line = line.rstrip()
             if re.match('^mn-dp[0-9]+$', line):
                 quietRun ( OVSKernelSwitchNew.vsctl_cmd + ' del-br ' + line )
-                
+
 
     def start( self, controllers, failopen=False ):
         "Start up kernel datapath."
@@ -858,6 +886,14 @@ class OVSKernelSwitchNew( Switch ):
         "Terminate kernel datapath."
         quietRun( self.vsctl_cmd + ' -- --if-exists del-br ' + self.dp )
         self.deleteIntfs()
+        OVSKernelSwitchNew.numSwitch -= 1
+
+        # Stop ovsdb-server and ovs-vswitchd if applicable
+        if OVSKernelSwitchNew.numSwitch == 0:
+            if OVSKernelSwitchNew.ovsdbServerPid:
+                quietRun("kill %d" % OVSKernelSwitchNew.ovsdbServerPid)
+            if OVSKernelSwitchNew.ovsVswitchdPid:
+                quietRun("kill %d" % OVSKernelSwitchNew.ovsVswitchdPid)
 
     def addIntf( self, intf, port ):
         super(OVSKernelSwitchNew, self).addIntf(intf, port)
