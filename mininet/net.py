@@ -520,7 +520,7 @@ class Mininet( object ):
         return "?"
         
     _listenRegex = re.compile("LISTENING")
-    def tcptest( self, hosts=None, timeout=0.5 ):
+    def tcptest( self, hosts=None, timeout=2 ):
         """TCP reachability test
            hosts: list of hosts. 
            timeout: TCP connection and read timeout in seconds
