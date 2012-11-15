@@ -554,6 +554,8 @@ class Switch( Node ):
         self.listenPort = listenPort
         if self.listenPort:
             self.opts += ' --listen=ptcp:%i ' % self.listenPort
+        # Modify description so OVS behaves properly in the bigtest environment
+        self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         if dpid:
             self.dpid = dpid
         elif self.defaultMAC:
