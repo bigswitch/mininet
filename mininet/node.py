@@ -775,6 +775,8 @@ class OVSKernelSwitchNew( Switch ):
         self.dp = 'mn-dp%i' % dp
         self.intf = self.dp
         OVSKernelSwitchNew.numSwitch += 1
+        # Mark the switch so controller will send LLDP/BDDP on all ports
+        self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
                 " in the root namespace.\n" )
@@ -919,6 +921,8 @@ class OVSKernelSwitch( Switch ):
         Switch.__init__( self, name, **kwargs )
         self.dp = 'dp%i' % dp
         self.intf = self.dp
+        # Mark the switch so controller will send LLDP/BDDP on all ports
+        self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
                 " in the root namespace.\n" )
