@@ -548,7 +548,7 @@ class Switch( Node ):
 
     portBase = SWITCH_PORT_BASE  # 0 for OF < 1.0, 1 for OF >= 1.0
 
-    def __init__( self, name, prefix = 's', opts='', listenPort=None, dpid=None, **kwargs):
+    def __init__( self, name, prefix = 's', opts='', listenPort=None, dpid=None, defVendor=False, **kwargs):
         Node.__init__( self, name, prefix=prefix, **kwargs )
         self.opts = opts
         self.listenPort = listenPort
@@ -560,6 +560,7 @@ class Switch( Node ):
             self.dpid = "00:00:" + self.defaultMAC
         else:
             self.dpid = None
+        self.defVendor = defVendor
 
     def defaultIntf( self ):
         "Return interface for HIGHEST port"
@@ -775,8 +776,6 @@ class OVSKernelSwitchNew( Switch ):
         self.dp = 'mn-dp%i' % dp
         self.intf = self.dp
         OVSKernelSwitchNew.numSwitch += 1
-        # Mark the switch so controller will send LLDP/BDDP on all ports
-        self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
                 " in the root namespace.\n" )
@@ -921,8 +920,6 @@ class OVSKernelSwitch( Switch ):
         Switch.__init__( self, name, **kwargs )
         self.dp = 'dp%i' % dp
         self.intf = self.dp
-        # Mark the switch so controller will send LLDP/BDDP on all ports
-        self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         if self.inNamespace:
             error( "OVSKernelSwitch currently only works"
                 " in the root namespace.\n" )
@@ -956,6 +953,9 @@ class OVSKernelSwitch( Switch ):
         intfs = [ self.intfs[ port ] for port in ports ]
         self.cmd( 'ovs-dpctl', 'add-if', self.dp, ' '.join( intfs ) )
         # Run protocol daemon
+        if not self.defVendor:
+            # Mark the switch so controller will send LLDP/BDDP on all ports
+            self.opts += ' --mfr-desc="big switch networks" --dp-desc="bigtest datapath" '
         self.cmd( 'ovs-openflowd ' + self.dp +
             ' '.join( [ ' tcp:%s:%d' % ( c.IP(), c.port ) \
                         for c in controllers ] ) +

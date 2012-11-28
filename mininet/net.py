@@ -108,7 +108,8 @@ class Mininet( object ):
                  cparams=ControllerParams( '10.0.0.0', 8 ),
                  build=True, xterms=False, cleanup=False,
                  inNamespace=False,
-                 autoSetMacs=False, autoStaticArp=False, listenPort=None ):
+                 autoSetMacs=False, autoStaticArp=False, listenPort=None,
+                 defVendor=False ):
         """Create Mininet object.
            topo: Topo (topology) object or None
            switch: Switch class
@@ -134,6 +135,7 @@ class Mininet( object ):
         self.autoSetMacs = autoSetMacs
         self.autoStaticArp = autoStaticArp
         self.listenPort = listenPort
+        self.defVendor = defVendor
 
         self.hosts = []
         self.switches = []
@@ -179,11 +181,13 @@ class Mininet( object ):
         if swCl == UserSwitch:
             sw = swCl( name, listenPort=self.listenPort,
                        defaultMAC=mac, defaultIP=ip, 
-                       inNamespace=self.inNamespace, prefix=prefix )
+                       inNamespace=self.inNamespace, prefix=prefix,
+                       defVendor=self.defVendor )
         else:
             sw = swCl( name, listenPort=self.listenPort,
                        defaultMAC=mac, defaultIP=ip, dp=self.dps,
-                       inNamespace=self.inNamespace , prefix=prefix )
+                       inNamespace=self.inNamespace , prefix=prefix,
+                       defVendor=self.defVendor )
         if not self.inNamespace and self.listenPort:
             self.listenPort += 1
         self.dps += 1
