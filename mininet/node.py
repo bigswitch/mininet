@@ -993,7 +993,7 @@ class OVSSwitch( Switch ):
         "Call ovs-vsctl del-br on all OVSSwitches in a list"
         quietRun( 'ovs-vsctl ' +
                   ' -- '.join( '--if-exists del-br %s' % s
-                               for s in switches if type(s) == cls ) )
+                               for s in switches ) )
 
     def dpctl( self, *args ):
         "Run ovs-ofctl command"
@@ -1044,33 +1044,38 @@ class OVSSwitch( Switch ):
         self.cmd( 'ifconfig lo up' )
         # Annoyingly, --if-exists option seems not to work
         self.cmd( 'ovs-vsctl del-br', self )
-        self.cmd( 'ovs-vsctl add-br', self )
-        if self.datapath == 'user':
-            self.cmd( 'ovs-vsctl set bridge', self,'datapath_type=netdev' )
         int( self.dpid, 16 ) # DPID must be a hex string
-        self.cmd( 'ovs-vsctl -- set Bridge', self,
-                  'other_config:datapath-id=' + self.dpid )
-        self.cmd( 'ovs-vsctl set-fail-mode', self, self.failMode )
-        for intf in self.intfList():
-            if not intf.IP():
-                self.attach( intf )
-        # Add controllers
-        clist = ' '.join( [ 'tcp:%s:%d' % ( c.IP(), c.port )
-                            for c in controllers ] )
+        # Interfaces and controllers
+        intfs = ' '.join( '-- add-port %s %s ' % ( self, intf )
+                         for intf in self.intfList() if not intf.IP() )
+        clist = ' '.join( '%s:%s:%d' % ( c.protocol, c.IP(), c.port )
+                         for c in controllers )
         if self.listenPort:
             clist += ' ptcp:%s' % self.listenPort
+        # Construct big ovs-vsctl command
+        cmd = ( 'ovs-vsctl add-br %s ' % self +
+                '-- set Bridge %s ' % self +
+                'other_config:datapath-id=%s ' % self.dpid +
+                '-- set-fail-mode %s %s ' % ( self, self.failMode ) +
+                intfs +
+                '-- set-controller %s %s ' % (self, clist ) )
         if not self.inband:
-                self.cmd( 'ovs-vsctl set bridge', self,
-                         'other-config:disable-in-band=true' )
-        self.cmd( 'ovs-vsctl set-controller', self, clist )
+            cmd += ( '-- set bridge %s '
+                     'other-config:disable-in-band=true ' % self )
+        if self.datapath == 'user':
+            cmd +=  '-- set bridge %s datapath_type=netdev ' % self
         # Reconnect quickly to controllers (1s vs. 15s max_backoff)
         for uuid in self.controllerUUIDs():
             if uuid.count( '-' ) != 4:
                 # Doesn't look like a UUID
                 continue
             uuid = uuid.strip()
-            self.cmd( 'ovs-vsctl set Controller', uuid,
-                      'max_backoff=1000' )
+            cmd += '-- set Controller %smax_backoff=1000 ' % uuid
+        # Do it!!
+        self.cmd( cmd )
+        for intf in self.intfList():
+            self.TCReapply( intf )
+
 
     def stop( self ):
         "Terminate OVS switch."
@@ -1085,8 +1090,9 @@ OVSKernelSwitch = OVSSwitch
 class IVSSwitch(Switch):
     """IVS virtual switch"""
 
-    def __init__( self, name, **kwargs ):
+    def __init__( self, name, verbose=True, **kwargs ):
         Switch.__init__( self, name, **kwargs )
+        self.verbose = verbose
 
     @classmethod
     def setup( cls ):
@@ -1101,12 +1107,19 @@ class IVSSwitch(Switch):
                    'not be loaded. Try modprobe openvswitch.\n' )
             exit( 1 )
 
+    @classmethod
+    def batchShutdown( cls, switches ):
+        "Kill each IVS switch, to be waited on later in stop()"
+        for switch in switches:
+            switch.cmd( 'kill %ivs' )
+
     def start( self, controllers ):
         "Start up a new IVS switch"
         args = ['ivs']
         args.extend( ['--name', self.name] )
         args.extend( ['--dpid', self.dpid] )
-        args.extend( ['--verbose'] )
+        if self.verbose:
+            args.extend( ['--verbose'] )
         for intf in self.intfs.values():
             if not intf.IP():
                 args.extend( ['-i', intf.name] )
@@ -1149,12 +1162,13 @@ class Controller( Node ):
 
     def __init__( self, name, inNamespace=False, command='controller',
                   cargs='-v ptcp:%d', cdir=None, ip="127.0.0.1",
-                  port=6633, **params ):
+                  port=6633, protocol='tcp', **params ):
         self.command = command
         self.cargs = cargs
         self.cdir = cdir
         self.ip = ip
         self.port = port
+        self.protocol = protocol
         Node.__init__( self, name, inNamespace=inNamespace,
                        ip=ip, **params  )
         self.cmd( 'ifconfig lo up' )  # Shouldn't be necessary
@@ -1171,7 +1185,7 @@ class Controller( Node ):
         listening = self.cmd( "echo A | telnet -e A %s %d" %
                               ( self.ip, self.port ) )
         if 'Connected' in listening:
-            servers = self.cmd( 'netstat -atp' ).split( '\n' )
+            servers = self.cmd( 'netstat -natp' ).split( '\n' )
             pstr = ':%d ' % self.port
             clist = servers[ 0:1 ] + [ s for s in servers if pstr in s ]
             raise Exception( "Please shut down the controller which is"

@@ -91,7 +91,7 @@ import re
 import select
 import signal
 from time import sleep
-from itertools import chain
+from itertools import chain, groupby
 
 from mininet.cli import CLI
 from mininet.log import info, error, debug, output
@@ -408,9 +408,9 @@ class Mininet( object ):
             info( '*** Stopping %i terms\n' % len( self.terms ) )
             self.stopXterms()
         info( '*** Stopping %i switches\n' % len( self.switches ) )
-        swclass = type( self.switches[ 0 ] )
-        if False and self.switches and hasattr( swclass, 'batchShutdown' ):
-            swclass.batchShutdown( self.switches )
+        for swclass, switches in groupby( sorted( self.switches, key=type ), type ):
+            if hasattr( swclass, 'batchShutdown' ):
+                swclass.batchShutdown( switches )
         for switch in self.switches:
             info( switch.name + ' ' )
             switch.stop()
@@ -507,7 +507,7 @@ class Mininet( object ):
                     output( ( '%s ' % dest.name ) if received else 'X ' )
             output( '\n' )
         if packets > 0:
-            ploss = 100 * lost / packets
+            ploss = 100.0 * lost / packets
             received = packets - lost
             output( "*** Results: %i%% dropped (%d/%d received)\n" %
                     ( ploss, received, packets ) )
@@ -578,10 +578,10 @@ class Mininet( object ):
                     (rttmin, rttavg, rttmax, rttdev) )
         return all_outputs
 
-    def pingAll( self ):
+    def pingAll( self, timeout=None ):
         """Ping between all hosts.
            returns: ploss packet loss percentage"""
-        return self.ping()
+        return self.ping( timeout=timeout )
 
     def pingPair( self ):
         """Ping between first two hosts, useful for testing.
