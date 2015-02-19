@@ -41,6 +41,7 @@ from mininet.util import quietRun, isShellBuiltin, dumpNodeConnections
 has_setup_readline = False
 def setup_readline():
     "Set up history if readline is available"
+    global has_setup_readline
 
     # Only set up readline once to prevent multiplying the history file
     if has_setup_readline:
