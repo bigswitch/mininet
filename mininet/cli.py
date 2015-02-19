@@ -38,6 +38,25 @@ from mininet.log import info, output, error
 from mininet.term import makeTerms, runX11
 from mininet.util import quietRun, isShellBuiltin, dumpNodeConnections
 
+has_setup_readline = False
+def setup_readline():
+    "Set up history if readline is available"
+
+    # Only set up readline once to prevent multiplying the history file
+    if has_setup_readline:
+        return
+    has_setup_readline = True
+
+    try:
+        import readline
+    except ImportError:
+        pass
+    else:
+        history_path = os.path.expanduser('~/.mininet_history')
+        if os.path.isfile(history_path):
+            readline.read_history_file(history_path)
+        atexit.register(lambda: readline.write_history_file(history_path))
+
 class CLI( Cmd ):
     "Simple command-line interface to talk to nodes."
 
@@ -55,20 +74,12 @@ class CLI( Cmd ):
         Cmd.__init__( self )
         info( '*** Starting CLI:\n' )
 
-        # Setup history if readline is available
-        try:
-            import readline
-        except ImportError:
-            pass
-        else:
-            history_path = os.path.expanduser('~/.mininet_history')
-            if os.path.isfile(history_path):
-                readline.read_history_file(history_path)
-            atexit.register(lambda: readline.write_history_file(history_path))
-
         if self.inputFile:
             self.do_source( self.inputFile )
             return
+
+        setup_readline()
+
         while True:
             try:
                 # Make sure no nodes are still waiting
