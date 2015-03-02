@@ -74,6 +74,17 @@ fi
 # More distribution info
 DIST_LC=`echo $DIST | tr [A-Z] [a-z]` # as lower case
 
+
+# Determine whether version $1 >= version $2
+# usage: if version_ge 1.20 1.2.3; then echo "true!"; fi
+function version_ge {
+    # sort -V sorts by *version number*
+    latest=`printf "$1\n$2" | sort -V | tail -1`
+    # If $1 is latest version, then $1 >= $2
+    [ "$1" == "$latest" ]
+}
+
+
 # Kernel Deb pkg to be removed:
 KERNEL_IMAGE_OLD=linux-image-2.6.26-33-generic
 
@@ -85,10 +96,6 @@ OVS_BUILDSUFFIX=-ignore # was -2
 OVS_PACKAGE_NAME=ovs-$OVS_RELEASE-core-$DIST_LC-$RELEASE-$ARCH$OVS_BUILDSUFFIX.tar
 OVS_TAG=v$OVS_RELEASE
 
-# Command-line versions overrides that simplify custom VM creation
-# To use, pass in the vars on the cmd line before install.sh, e.g.
-# WS_DISSECTOR_REV=pre-ws-1.10.0 install.sh -w
-WS_DISSECTOR_REV=${WS_DISSECTOR_REV:-""}
 OF13_SWITCH_REV=${OF13_SWITCH_REV:-""}
 
 
@@ -133,6 +140,9 @@ function mn_deps {
 function mn_dev {
     echo "Installing Mininet developer dependencies"
     $install doxygen doxypy texlive-fonts-recommended
+    if ! $install doxygen-latex; then
+        echo "doxygen-latex not needed"
+    fi
 }
 
 # The following will cause a full OF install, covering:
@@ -200,65 +210,44 @@ function of13 {
     cd $BUILD_DIR
 }
 
-function wireshark_version_check {
-    # Check Wireshark version
-    WS=$(which wireshark)
-    WS_VER_PATCH=(1 10) # targetting wireshark 1.10.0
-    WS_VER=($($WS --version | sed 's/[a-z ]*\([0-9]*\).\([0-9]*\).\([0-9]*\).*/\1 \2 \3/'))
-    if [ "${WS_VER[0]}" -lt "${WS_VER_PATCH[0]}" ] ||
-       [[ "${WS_VER[0]}" -le "${WS_VER_PATCH[0]}" && "${WS_VER[1]}" -lt "${WS_VER_PATCH[1]}" ]]
-    then
-        # pre-1.10.0 wireshark
-        echo "Setting revision: pre-ws-1.10.0"
-        WS_DISSECTOR_REV="pre-ws-1.10.0" 
-    fi
-}
 
-function wireshark {
-    echo "Installing Wireshark dissector..."
-
-    if [ "$DIST" = "Fedora" ]; then
-        # Just install Fedora's wireshark RPMS
-        # Fedora's wirehark >= 1.10.2-2 includes an OF dissector
-        # (it has been backported from the future Wireshark 1.12 code base)
-        $install wireshark wireshark-gnome
-        return
-    fi
-
-    $install wireshark tshark libgtk2.0-dev
-
-    if [ "$DIST" = "Ubuntu" ] && [ "$RELEASE" != "10.04" ]; then
-        # Install newer version
-        $install scons mercurial libglib2.0-dev
-        $install libwiretap-dev libwireshark-dev
-        cd $BUILD_DIR
-        hg clone https://bitbucket.org/barnstorm/of-dissector
-        if [[ -z "$WS_DISSECTOR_REV" ]]; then
-            wireshark_version_check
+function install_wireshark {
+    if ! which wireshark; then
+        echo "Installing Wireshark"
+        if [ "$DIST" = "Fedora" ]; then
+            $install wireshark wireshark-gnome
+        else
+            $install wireshark tshark
         fi
-        cd of-dissector
-        if [[ -n "$WS_DISSECTOR_REV" ]]; then
-            hg checkout ${WS_DISSECTOR_REV}
-        fi
-        # Build dissector
-        cd src
-        export WIRESHARK=/usr/include/wireshark
-        scons
-        # libwireshark0/ on 11.04; libwireshark1/ on later
-        WSDIR=`find /usr/lib -type d -name 'libwireshark*' | head -1`
-        WSPLUGDIR=$WSDIR/plugins/
-        sudo cp openflow.so $WSPLUGDIR
-        echo "Copied openflow plugin to $WSPLUGDIR"
-    else
-        # Install older version from reference source
-        cd $BUILD_DIR/openflow/utilities/wireshark_dissectors/openflow
-        make
-        sudo make install
     fi
 
     # Copy coloring rules: OF is white-on-blue:
+    echo "Optionally installing wireshark color filters"
     mkdir -p $HOME/.wireshark
-    cp $MININET_DIR/mininet/util/colorfilters $HOME/.wireshark
+    cp -n $MININET_DIR/mininet/util/colorfilters $HOME/.wireshark
+
+    echo "Checking Wireshark version"
+    WSVER=`wireshark -v | egrep -o '[0-9\.]+' | head -1`
+    if version_ge $WSVER 1.12; then
+        echo "Wireshark version $WSVER >= 1.12 - returning"
+        return
+    fi
+
+    echo "Cloning LoxiGen and building openflow.lua dissector"
+    cd $BUILD_DIR
+    git clone https://github.com/floodlight/loxigen.git
+    cd loxigen
+    make wireshark
+
+    # Copy into plugin directory
+    # libwireshark0/ on 11.04; libwireshark1/ on later
+    WSDIR=`find /usr/lib -type d -name 'libwireshark*' | head -1`
+    WSPLUGDIR=$WSDIR/plugins/
+    PLUGIN=loxi_output/wireshark/openflow.lua
+    sudo cp $PLUGIN $WSPLUGDIR
+    echo "Copied openflow plugin $PLUGIN to $WSPLUGDIR"
+
+    cd $BUILD_DIR
 }
 
 
@@ -269,7 +258,7 @@ function ubuntuOvs {
     OVS_SRC=$BUILD_DIR/openvswitch
     OVS_TARBALL_LOC=http://openvswitch.org/releases
 
-    if [ "$DIST" = "Ubuntu" ] && [ `expr $RELEASE '>=' 12.04` = 1 ]; then
+    if [ "$DIST" = "Ubuntu" ] && version_ge $RELEASE 12.04; then
         rm -rf $OVS_SRC
         mkdir -p $OVS_SRC
         cd $OVS_SRC
@@ -340,17 +329,24 @@ function ovs {
         $install openvswitch-datapath-dkms
     fi
 
-    $install openvswitch-switch openvswitch-controller
+    $install openvswitch-switch
+    if $install openvswitch-controller; then
+        # Switch can run on its own, but
+        # Mininet should control the controller
+        # This appears to only be an issue on Ubuntu/Debian
+        if sudo service openvswitch-controller stop; then
+            echo "Stopped running controller"
+        fi
+        if [ -e /etc/init.d/openvswitch-controller ]; then
+            sudo update-rc.d openvswitch-controller disable
+        fi
+    else
+        echo "Attempting to install openvswitch-testcontroller"
+        if ! $install openvswitch-testcontroller; then
+            echo "Failed - giving up"
+        fi
+    fi
 
-    # Switch can run on its own, but
-    # Mininet should control the controller
-    # This appears to only be an issue on Ubuntu/Debian
-    if sudo service openvswitch-controller stop; then
-        echo "Stopped running controller"
-    fi
-    if [ -e /etc/init.d/openvswitch-controller ]; then
-        sudo update-rc.d openvswitch-controller disable
-    fi
 }
 
 function remove_ovs {
@@ -390,6 +386,38 @@ function ivs {
     sudo make install
 }
 
+# Install RYU
+function ryu {
+    echo "Installing RYU..."
+
+    # install Ryu dependencies"
+    $install autoconf automake g++ libtool python make
+    if [ "$DIST" = "Ubuntu" ]; then
+        $install libxml2 libxslt-dev python-pip python-dev
+        sudo pip install gevent
+    elif [ "$DIST" = "Debian" ]; then
+        $install libxml2 libxslt-dev python-pip python-dev
+        sudo pip install gevent
+    fi
+
+    # if needed, update python-six
+    SIX_VER=`pip show six | grep Version | awk '{print $2}'`
+    if version_ge 1.7.0 $SIX_VER; then
+        echo "Installing python-six version 1.7.0..."
+        sudo pip install -I six==1.7.0
+    fi
+    # fetch RYU
+    cd $BUILD_DIR/
+    git clone git://github.com/osrg/ryu.git ryu
+    cd ryu
+
+    # install ryu
+    sudo python ./setup.py install
+
+    # Add symbolic link to /usr/bin
+    sudo ln -s ./bin/ryu-manager /usr/local/bin/ryu-manager
+}
+
 # Install NOX with tutorial files
 function nox {
     echo "Installing NOX w/tutorial files..."
@@ -418,7 +446,7 @@ function nox {
     # Apply patches
     git checkout -b tutorial-destiny
     git am $MININET_DIR/mininet/util/nox-patches/*tutorial-port-nox-destiny*.patch
-    if [ "$DIST" = "Ubuntu" ] && [ `expr $RELEASE '>=' 12.04` = 1 ]; then
+    if [ "$DIST" = "Ubuntu" ] && version_ge $RELEASE 12.04; then
         git am $MININET_DIR/mininet/util/nox-patches/*nox-ubuntu12-hacks.patch
     fi
 
@@ -526,15 +554,22 @@ function vm_other {
     #    BLACKLIST=/etc/modprobe.d/blacklist
     #fi
     #sudo sh -c "echo 'blacklist net-pf-10\nblacklist ipv6' >> $BLACKLIST"
-
+    echo "Disabling IPv6"
     # Disable IPv6
-    if ! grep 'disable IPv6' /etc/sysctl.conf; then
+    if ! grep 'disable_ipv6' /etc/sysctl.conf; then
         echo 'Disabling IPv6'
         echo '
 # Mininet: disable IPv6
 net.ipv6.conf.all.disable_ipv6 = 1
 net.ipv6.conf.default.disable_ipv6 = 1
 net.ipv6.conf.lo.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf > /dev/null
+    fi
+    # Since the above doesn't disable neighbor discovery, also do this:
+    if ! grep 'ipv6.disable' /etc/default/grub; then
+        sudo sed -i -e \
+        's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="ipv6.disable=1/' \
+        /etc/default/grub
+        sudo update-grub
     fi
     # Disabling IPv6 breaks X11 forwarding via ssh
     line='AddressFamily inet'
@@ -556,6 +591,13 @@ net.ipv6.conf.lo.disable_ipv6 = 1' | sudo tee -a /etc/sysctl.conf > /dev/null
 
     # Install NTP
     $install ntp
+
+    # Install vconfig for VLAN example
+    if [ "$DIST" = "Fedora" ]; then
+        $install vconfig
+    else
+        $install vlan
+    fi
 
     # Set git to colorize everything.
     git config --global color.diff auto
@@ -606,7 +648,7 @@ function all {
     # Skip mn_dev (doxypy/texlive/fonts/etc.) because it's huge
     # mn_dev
     of
-    wireshark
+    install_wireshark
     ovs
     # We may add ivs once it's more mature
     # ivs
@@ -652,7 +694,7 @@ function vm_clean {
 }
 
 function usage {
-    printf '\nUsage: %s [-abcdfhikmnprtvVwx03]\n\n' $(basename $0) >&2
+    printf '\nUsage: %s [-abcdfhikmnprtvVwxy03]\n\n' $(basename $0) >&2
 
     printf 'This install script attempts to install useful packages\n' >&2
     printf 'for Mininet. It should (hopefully) work on Ubuntu 11.10+\n' >&2
@@ -679,6 +721,7 @@ function usage {
     printf -- ' -v: install Open (V)switch\n' >&2
     printf -- ' -V <version>: install a particular version of Open (V)switch on Ubuntu\n' >&2
     printf -- ' -w: install OpenFlow (W)ireshark dissector\n' >&2
+    printf -- ' -y: install R(y)u Controller\n' >&2
     printf -- ' -x: install NO(X) Classic OpenFlow controller\n' >&2
     printf -- ' -0: (default) -0[fx] installs OpenFlow 1.0 versions\n' >&2
     printf -- ' -3: -3[fx] installs OpenFlow 1.3 versions\n' >&2
@@ -691,7 +734,7 @@ if [ $# -eq 0 ]
 then
     all
 else
-    while getopts 'abcdefhikmnprs:tvV:wx03' OPTION
+    while getopts 'abcdefhikmnprs:tvV:wxy03' OPTION
     do
       case $OPTION in
       a)    all;;
@@ -718,12 +761,13 @@ else
       v)    ovs;;
       V)    OVS_RELEASE=$OPTARG;
             ubuntuOvs;;
-      w)    wireshark;;
+      w)    install_wireshark;;
       x)    case $OF_VERSION in
             1.0) nox;;
             1.3) nox13;;
             *)  echo "Invalid OpenFlow version $OF_VERSION";;
             esac;;
+      y)    ryu;;
       0)    OF_VERSION=1.0;;
       3)    OF_VERSION=1.3;;
       ?)    usage;;

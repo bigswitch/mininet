@@ -7,21 +7,8 @@ cpu.py: test iperf bandwidth for varying cpu limits
 from mininet.net import Mininet
 from mininet.node import CPULimitedHost
 from mininet.topolib import TreeTopo
-from mininet.util import custom
-from mininet.log import setLogLevel, output
-
-from time import sleep
-
-def waitListening(client, server, port):
-    "Wait until server is listening on port"
-    if not client.cmd('which telnet'):
-        raise Exception('Could not find telnet')
-    cmd = ('sh -c "echo A | telnet -e A %s %s"' %
-           (server.IP(), port))
-    while 'Connected' not in client.cmd(cmd):
-        output('waiting for', server,
-               'to listen on port', port, '\n')
-        sleep(.5)
+from mininet.util import custom, waitListening
+from mininet.log import setLogLevel, info
 
 
 def bwtest( cpuLimits, period_us=100000, seconds=5 ):
@@ -38,7 +25,12 @@ def bwtest( cpuLimits, period_us=100000, seconds=5 ):
             host = custom( CPULimitedHost, sched=sched,
                            period_us=period_us,
                            cpu=cpu )
-            net = Mininet( topo=topo, host=host )
+            try:
+                net = Mininet( topo=topo, host=host )
+            # pylint: disable=bare-except
+            except:
+                info( '*** Skipping host %s\n' % sched )
+                break
             net.start()
             net.pingAll()
             hosts = [ net.getNodeByName( h ) for h in topo.hosts() ]
